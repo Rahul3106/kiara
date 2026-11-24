@@ -1,0 +1,17 @@
+{
+  "name": "kiara-medicals-fullstack",
+  "version": "1.0.0",
+  "description": "Production-ready Pharmacy Management System for Kiara Medicals",
+  "private": true,
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "build": "npm --prefix client run build",
+    "start": "node server/index.js",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "db:migrate": "node database/migrate.js"
+  },
+  "keywords": ["pharmacy", "pos", "billing", "gst-invoice", "inventory"],
+  "author": "Kiara Medicals",
+  "license": "ISC"
+}

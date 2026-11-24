@@ -79,7 +79,7 @@ router.get("/", authenticateToken, async (req, res) => {
     const branchId = req.user.branchId;
 
     if (
-  req.user.role === "SHOP_USER" &&
+  ["SHOP_USER", "SHOP_MANAGER"].includes(req.user.role) &&
   !branchId
 ) {
   return res.status(403).json({

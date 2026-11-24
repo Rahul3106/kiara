@@ -14,6 +14,13 @@ async function createTestUsers() {
         branchCode: null,
       },
       {
+        username: "managera",
+        password: "ManagerA@12345",
+        fullName: "Test Shop Manager A",
+        role: "SHOP_MANAGER",
+        branchCode: "BR001",
+      },
+      {
         username: "shopa",
         password: "ShopA@12345",
         fullName: "Test Shop A User",

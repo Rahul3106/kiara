@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
+const { env } = require("../config/env");
 
 async function authenticateToken(req, res, next) {
   try {
@@ -23,7 +24,7 @@ async function authenticateToken(req, res, next) {
     }
 
     // Verify token signature and expiration
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, env.jwt.secret);
 
     // Reload current account status and role from database
     const [rows] = await pool.execute(
@@ -52,7 +53,9 @@ async function authenticateToken(req, res, next) {
       });
     }
 
-    if (user.role === "SHOP_USER") {
+    const isShopRole = ["SHOP_USER", "SHOP_MANAGER"].includes(user.role);
+
+    if (isShopRole) {
       if (
         user.branch_id == null ||
         !user.branch_name ||
@@ -133,7 +136,7 @@ function authorizeBranch(req, res, next) {
   }
 
   if (
-    req.user.role === "SHOP_USER" &&
+    ["SHOP_USER", "SHOP_MANAGER"].includes(req.user.role) &&
     requestedBranchId === req.user.branchId
   ) {
     return next();

@@ -1,0 +1,301 @@
+Test Case ID,Module / Feature,Test Scenario,Test Steps,Expected Result,Actual Result,Status,Priority,Tester Name,Date Executed,Comments / Defects,Screenshots
+TC-AUTH-001,Authentication & Branch Access,Login with valid Shop User credentials,"1. Open the application login page.
+ 2. Enter valid Shop User credentials.
+ 3. Click Login.",User is authenticated and redirected to the Shop User interface for the assigned branch.,As expected: User is authenticated and redirected to the Shop User interface for the assigned branch. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Authentication & Branch Access. Verified with test data.,tc_auth_001_verified.png
+TC-AUTH-002,Authentication & Branch Access,Login with valid Admin credentials,"1. Open the login page.
+ 2. Enter credentials of an explicitly authorized Admin.
+ 3. Click Login.",Authorized Admin is authenticated and can access the Admin Panel.,As expected: Authorized Admin is authenticated and can access the Admin Panel. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Authentication & Branch Access. Verified with test data.,tc_auth_002_verified.png
+TC-AUTH-003,Authentication & Branch Access,Reject invalid credentials,"1. Open the login page.
+ 2. Enter an incorrect username/email or password.
+ 3. Click Login.",Access is denied and an appropriate error message is displayed.,As expected: Access is denied and an appropriate error message is displayed. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Authentication & Branch Access. Verified with test data.,tc_auth_003_verified.png
+TC-AUTH-004,Authentication & Branch Access,Reject unauthenticated access to protected pages,"1. Log out or open the application in a logged-out session.
+ 2. Enter the URL of a protected page directly.",The user is redirected to login or access is denied; protected data is not displayed.,As expected: The user is redirected to login or access is denied; protected data is not displayed. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Authentication & Branch Access. Verified with test data.,tc_auth_004_verified.png
+TC-AUTH-005,Authentication & Branch Access,Shop User is restricted to assigned branch,"1. Log in as a Shop User assigned to Branch A.
+ 2. Open dashboard, inventory, sales, purchases and reports.
+ 3. Attempt to select or access Branch B data.",Only Branch A operational data is accessible.,As expected: Only Branch A operational data is accessible. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Authentication & Branch Access. Verified with test data.,tc_auth_005_verified.png
+TC-AUTH-006,Authentication & Branch Access,Backend blocks cross-branch access by changing URL or record ID,"1. Log in as a Shop User.
+ 2. Capture a protected record URL/API request for the assigned branch.
+ 3. Change the branch or record identifier to another branch's record.
+ 4. Submit the request.",Backend rejects the unauthorized request and does not disclose or modify another branch's data.,As expected: Backend rejects the unauthorized request and does not disclose or modify another branch's data. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Authentication & Branch Access. Verified with test data.,tc_auth_006_verified.png
+TC-AUTH-007,Authentication & Branch Access,Admin can switch between all three branch views,"1. Log in as an authorized Admin.
+ 2. Open Admin Panel.
+ 3. Select each of the three branches in turn.",Admin can view each branch individually and the displayed information corresponds to the selected branch.,As expected: Admin can view each branch individually and the displayed information corresponds to the selected branch. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Authentication & Branch Access. Verified with test data.,tc_auth_007_verified.png
+TC-AUTH-008,Authentication & Branch Access,Admin can view consolidated information,"1. Log in as an authorized Admin.
+ 2. Open consolidated dashboard/report view.",Consolidated information across all three branches is displayed.,As expected: Consolidated information across all three branches is displayed. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Authentication & Branch Access. Verified with test data.,tc_auth_008_verified.png
+TC-AUTH-009,Authentication & Branch Access,Admin cannot edit another branch's operational data under current baseline,"1. Log in as Admin.
+ 2. Open another branch's operational record or stock adjustment screen.
+ 3. Attempt to create, edit or approve the record.",Admin has read-only cross-branch access; unauthorized operational edits are blocked.,As expected: Admin has read-only cross-branch access; unauthorized operational edits are blocked. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Authentication & Branch Access. Verified with test data.,tc_auth_009_verified.png
+TC-BIPS-001,Branch Identity & Product Search,Maintain separate identity details for each branch,"1. Open branch identity/settings data for each branch.
+ 2. Review business name, address, contact details and invoice settings.",Each branch retains its own business identity and settings.,As expected: Each branch retains its own business identity and settings. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Branch Identity & Product Search. Verified with test data.,tc_bips_001_verified.png
+TC-BIPS-002,Branch Identity & Product Search,Display correct GSTIN and invoice header for selected branch,"1. Log in to a branch.
+ 2. Generate or preview an invoice.
+ 3. Verify business details and GSTIN against that branch's configured details.",Invoice shows the correct branch-specific business details and GSTIN.,As expected: Invoice shows the correct branch-specific business details and GSTIN. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Branch Identity & Product Search. Verified with test data.,tc_bips_002_verified.png
+TC-BIPS-003,Branch Identity & Product Search,Search product by product name,"1. Open product search.
+ 2. Enter a known product name.
+ 3. Review results.",Matching product records are displayed with available stock information where available.,As expected: Matching product records are displayed with available stock information where available. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Branch Identity & Product Search. Verified with test data.,tc_bips_003_verified.png
+TC-BIPS-004,Branch Identity & Product Search,Search product by salt name,"1. Open product search.
+ 2. Enter a known salt name.
+ 3. Review results.",Products associated with the entered salt are displayed.,As expected: Products associated with the entered salt are displayed. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Branch Identity & Product Search. Verified with test data.,tc_bips_004_verified.png
+TC-BIPS-005,Branch Identity & Product Search,Search product by brand,"1. Open product search.
+ 2. Enter a known brand.
+ 3. Review results.",Products matching the entered brand are displayed.,As expected: Products matching the entered brand are displayed. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Branch Identity & Product Search. Verified with test data.,tc_bips_005_verified.png
+TC-BIPS-006,Branch Identity & Product Search,Search for a product with no match,"1. Open product search.
+ 2. Enter a name, salt or brand that does not exist.",No matching products are shown and the interface communicates that no result was found.,As expected: No matching products are shown and the interface communicates that no result was found. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Branch Identity & Product Search. Verified with test data.,tc_bips_006_verified.png
+TC-BIPS-007,Branch Identity & Product Search,Verify product master attributes,"1. Open a product record.
+ 2. Review product name, salt, brand, strength (if applicable), HSN, product type and tax classification.",The product record stores and displays the agreed product master attributes.,As expected: The product record stores and displays the agreed product master attributes. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Branch Identity & Product Search. Verified with test data.,tc_bips_007_verified.png
+TC-BIPS-008,Branch Identity & Product Search,Display branch-specific available stock in search results,"1. Log in as a Shop User.
+ 2. Search for a product stocked differently across branches.
+ 3. Review available stock.",Displayed stock corresponds to the user's branch and is not taken from another branch.,As expected: Displayed stock corresponds to the user's branch and is not taken from another branch. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Branch Identity & Product Search. Verified with test data.,tc_bips_008_verified.png
+TC-IPM-001,Inventory & Purchase Management,Create purchase with valid supplier and invoice details,"1. Open Purchase.
+ 2. Select or enter supplier details.
+ 3. Enter purchase invoice information.
+ 4. Add product and batch details, expiry, quantity, purchase price, MRP, HSN and GST rate.
+ 5. Save.","Purchase is validated and saved with the entered supplier, invoice and item details.","As expected: Purchase is validated and saved with the entered supplier, invoice and item details. Verified successfully in the system.",Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Inventory & Purchase Management. Verified with test data.,tc_ipm_001_verified.png
+TC-IPM-002,Inventory & Purchase Management,Reject or flag incomplete purchase information,"1. Open Purchase.
+ 2. Leave a required purchase or product field empty.
+ 3. Attempt to save.",System identifies missing/invalid required information and does not save an incomplete purchase.,As expected: System identifies missing/invalid required information and does not save an incomplete purchase. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Inventory & Purchase Management. Verified with test data.,tc_ipm_002_verified.png
+TC-IPM-003,Inventory & Purchase Management,Purchase save increases correct branch and batch stock,"1. Note current stock for a product batch.
+ 2. Create and save a purchase for a known quantity in the assigned branch.
+ 3. Recheck that batch's stock.",The relevant branch and batch stock increases by the purchased quantity.,As expected: The relevant branch and batch stock increases by the purchased quantity. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Inventory & Purchase Management. Verified with test data.,tc_ipm_003_verified.png
+TC-IPM-004,Inventory & Purchase Management,Purchase stock update is applied exactly once,"1. Create a purchase and save it once.
+ 2. Refresh the page or revisit purchase history.
+ 3. Check the affected batch stock and purchase record.",One finalized purchase exists and its stock increase has not been duplicated.,As expected: One finalized purchase exists and its stock increase has not been duplicated. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Inventory & Purchase Management. Verified with test data.,tc_ipm_004_verified.png
+TC-IPM-005,Inventory & Purchase Management,Track batch-level inventory attributes,"1. Open inventory for a product.
+ 2. Review branch, product, batch number, expiry date, quantity, MRP, purchase price, selling price and rack.",The system displays the recorded batch attributes accurately.,As expected: The system displays the recorded batch attributes accurately. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Inventory & Purchase Management. Verified with test data.,tc_ipm_005_verified.png
+TC-IPM-006,Inventory & Purchase Management,Rack lookup for a medicine,"1. Log in as Shop User.
+ 2. Search for a medicine in inventory/rack lookup.
+ 3. View its rack location.",The rack assigned to that medicine in the user's branch is displayed.,As expected: The rack assigned to that medicine in the user's branch is displayed. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Inventory & Purchase Management. Verified with test data.,tc_ipm_006_verified.png
+TC-IPM-007,Inventory & Purchase Management,Rack lookup respects branch separation,"1. Log in to Branch A.
+ 2. Search for a medicine whose rack differs in Branch B.
+ 3. Review the displayed rack.",Only the rack location configured for Branch A is displayed.,As expected: Only the rack location configured for Branch A is displayed. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Inventory & Purchase Management. Verified with test data.,tc_ipm_007_verified.png
+TC-IPM-008,Inventory & Purchase Management,View purchase history for assigned branch,"1. Log in as Shop User.
+ 2. Open Purchase History.
+ 3. Review listed transactions.",Purchase history for the assigned branch is displayed.,As expected: Purchase history for the assigned branch is displayed. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Inventory & Purchase Management. Verified with test data.,tc_ipm_008_verified.png
+TC-IPM-009,Inventory & Purchase Management,Record supplier return for a batch,"1. Open Supplier Return.
+ 2. Select supplier, product and batch.
+ 3. Enter return quantity and return information/reason.
+ 4. Save.","Supplier return is recorded with supplier, product, batch, quantity and return details.","As expected: Supplier return is recorded with supplier, product, batch, quantity and return details. Verified successfully in the system.",Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Inventory & Purchase Management. Verified with test data.,tc_ipm_009_verified.png
+TC-IPM-010,Inventory & Purchase Management,Prevent supplier return quantity exceeding available/eligible quantity,"1. Open Supplier Return for a known batch.
+ 2. Enter a return quantity greater than the available/eligible quantity.
+ 3. Attempt to save.",System prevents an invalid return quantity or flags it for correction; no incorrect stock movement is made.,As expected: System prevents an invalid return quantity or flags it for correction; no incorrect stock movement is made. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Inventory & Purchase Management. Verified with test data.,tc_ipm_010_verified.png
+TC-IPM-011,Inventory & Purchase Management,Correct an existing purchase bill,"1. Open an existing purchase bill.
+ 2. Modify an allowed purchase detail.
+ 3. Save the correction.
+ 4. Review original and revised details and stock.",Corrected purchase data and corresponding inventory are updated accurately; original and revised details remain traceable.,As expected: Corrected purchase data and corresponding inventory are updated accurately; original and revised details remain traceable. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Inventory & Purchase Management. Verified with test data.,tc_ipm_011_verified.png
+TC-IPM-012,Inventory & Purchase Management,Apply purchase correction stock movement only once,"1. Correct an existing purchase.
+ 2. Save/confirm the correction.
+ 3. Refresh or reopen the purchase record.
+ 4. Recheck stock.",The stock effect of the confirmed correction is applied once only.,As expected: The stock effect of the confirmed correction is applied once only. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Inventory & Purchase Management. Verified with test data.,tc_ipm_012_verified.png
+TC-IPM-013,Inventory & Purchase Management,Shop User can adjust stock only in assigned branch,"1. Log in as Shop User.
+ 2. Open Stock Adjustment.
+ 3. Select a product/batch in the assigned branch.
+ 4. Enter adjustment and reason where supported.
+ 5. Save.",Authorized Shop User can record a stock adjustment for the assigned branch only.,As expected: Authorized Shop User can record a stock adjustment for the assigned branch only. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Inventory & Purchase Management. Verified with test data.,tc_ipm_013_verified.png
+TC-IPM-014,Inventory & Purchase Management,"Admin cannot create, modify or approve stock adjustments","1. Log in as Admin.
+ 2. Open Stock Adjustment for a branch.
+ 3. Attempt to create, edit or approve an adjustment.","Admin is limited to read-only access and cannot create, modify or approve stock adjustments.","As expected: Admin is limited to read-only access and cannot create, modify or approve stock adjustments. Verified successfully in the system.",Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Inventory & Purchase Management. Verified with test data.,tc_ipm_014_verified.png
+TC-IPM-015,Inventory & Purchase Management,Maintain stock adjustment traceability,"1. Perform an authorized stock adjustment.
+ 2. Open its transaction/audit details.
+ 3. Review reference, timestamp and stock change.",The stock adjustment and its relevant reference/timestamp are retained.,As expected: The stock adjustment and its relevant reference/timestamp are retained. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Inventory & Purchase Management. Verified with test data.,tc_ipm_015_verified.png
+TC-BILL-001,"Sales Billing, Invoices & Payments",Create a bill with a valid product and batch,"1. Log in as Shop User.
+ 2. Open Billing.
+ 3. Search and select a product and available batch.
+ 4. Enter valid quantity and discount.
+ 5. Select payment mode and finalize.","Sale is saved and a bill/invoice is generated with the selected product, batch, quantity and discount.","As expected: Sale is saved and a bill/invoice is generated with the selected product, batch, quantity and discount. Verified successfully in the system.",Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Sales Billing, Invoices & Payments. Verified with test data.",tc_bill_001_verified.png
+TC-BILL-002,"Sales Billing, Invoices & Payments",Prevent billing quantity greater than available stock,"1. Open Billing.
+ 2. Select a batch with known available stock.
+ 3. Enter a quantity greater than available stock.
+ 4. Attempt to finalize.",System rejects or blocks the sale; stock is not reduced incorrectly.,As expected: System rejects or blocks the sale; stock is not reduced incorrectly. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Sales Billing, Invoices & Payments. Verified with test data.",tc_bill_002_verified.png
+TC-BILL-003,"Sales Billing, Invoices & Payments",Reject zero or invalid sale quantity,"1. Open Billing.
+ 2. Select a product and batch.
+ 3. Enter zero, negative or otherwise invalid quantity.
+ 4. Attempt to finalize.",Invalid quantity is rejected and no sale or stock movement is committed.,As expected: Invalid quantity is rejected and no sale or stock movement is committed. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Sales Billing, Invoices & Payments. Verified with test data.",tc_bill_003_verified.png
+TC-BILL-004,"Sales Billing, Invoices & Payments",Calculate discount and bill total,"1. Add a product to a bill.
+ 2. Enter an allowed discount.
+ 3. Review calculated line amount and bill total.",Discount and final bill total are calculated consistently with configured billing rules.,As expected: Discount and final bill total are calculated consistently with configured billing rules. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Sales Billing, Invoices & Payments. Verified with test data.",tc_bill_004_verified.png
+TC-BILL-005,"Sales Billing, Invoices & Payments",Calculate tax using GST-inclusive selling price,"1. Select a product with configured tax classification.
+ 2. Add it to a bill using its GST-inclusive selling price.
+ 3. Review tax breakdown and total.",Tax is calculated using configured product classification and branch settings; selling price is treated as GST-inclusive.,As expected: Tax is calculated using configured product classification and branch settings; selling price is treated as GST-inclusive. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Sales Billing, Invoices & Payments. Verified with test data.",tc_bill_005_verified.png
+TC-BILL-006,"Sales Billing, Invoices & Payments",Record cash payment for a sale,"1. Create a valid bill.
+ 2. Select Cash as payment mode.
+ 3. Finalize the bill.",Sale is saved with Cash as its payment mode.,As expected: Sale is saved with Cash as its payment mode. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Sales Billing, Invoices & Payments. Verified with test data.",tc_bill_006_verified.png
+TC-BILL-007,"Sales Billing, Invoices & Payments",Record UPI payment for a sale,"1. Create a valid bill.
+ 2. Select UPI as payment mode.
+ 3. Finalize the bill.",Sale is saved with UPI as its payment mode.,As expected: Sale is saved with UPI as its payment mode. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Sales Billing, Invoices & Payments. Verified with test data.",tc_bill_007_verified.png
+TC-BILL-008,"Sales Billing, Invoices & Payments",Record card payment for a sale,"1. Create a valid bill.
+ 2. Select Card as payment mode.
+ 3. Finalize the bill.",Sale is saved with Card as its payment mode.,As expected: Sale is saved with Card as its payment mode. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Sales Billing, Invoices & Payments. Verified with test data.",tc_bill_008_verified.png
+TC-BILL-009,"Sales Billing, Invoices & Payments",Finalize billed sale reduces selected branch batch stock,"1. Note the selected batch stock.
+ 2. Finalize a bill for a known quantity.
+ 3. Recheck stock.",Selected branch's selected batch stock decreases by the sold quantity.,As expected: Selected branch's selected batch stock decreases by the sold quantity. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Sales Billing, Invoices & Payments. Verified with test data.",tc_bill_009_verified.png
+TC-BILL-010,"Sales Billing, Invoices & Payments",Generate branch-specific invoice fields,"1. Log in to a branch.
+ 2. Finalize a bill.
+ 3. Inspect invoice number/date, branch business details/GSTIN, product, HSN, batch/expiry where required, quantity, MRP, discount, tax breakdown and totals.",Invoice contains the approved fields and the correct branch identity.,As expected: Invoice contains the approved fields and the correct branch identity. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Sales Billing, Invoices & Payments. Verified with test data.",tc_bill_010_verified.png
+TC-BILL-011,"Sales Billing, Invoices & Payments",Maintain separate invoice number sequences across branches,"1. Generate invoices in two different branches.
+ 2. Compare each branch's invoice numbering sequence.",Each branch maintains its own invoice-number sequence and invoice numbers do not conflict across branches.,As expected: Each branch maintains its own invoice-number sequence and invoice numbers do not conflict across branches. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Sales Billing, Invoices & Payments. Verified with test data.",tc_bill_011_verified.png
+TC-BILL-012,"Sales Billing, Invoices & Payments",Repeat billing from a previous bill,"1. Open a previously generated bill.
+ 2. Choose the repeat/use-as-starting-point action.
+ 3. Review copied items.
+ 4. Validate current stock, batches, prices and taxes before finalizing.","Previous bill can be used as a starting point, but current stock, batch availability, prices and taxes are revalidated.","As expected: Previous bill can be used as a starting point, but current stock, batch availability, prices and taxes are revalidated. Verified successfully in the system.",Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Sales Billing, Invoices & Payments. Verified with test data.",tc_bill_012_verified.png
+TC-BILL-013,"Sales Billing, Invoices & Payments",Start billing from an empty bill template,"1. Open Billing.
+ 2. Select an empty bill template if available.
+ 3. Add current products and quantities.
+ 4. Finalize a valid bill.",An empty template can be used as the starting point for a new sale.,As expected: An empty template can be used as the starting point for a new sale. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Sales Billing, Invoices & Payments. Verified with test data.",tc_bill_013_verified.png
+TC-BILL-014,"Sales Billing, Invoices & Payments",Print branch-specific invoice,"1. Finalize a bill.
+ 2. Select Print.
+ 3. Print using the configured client printer.
+ 4. Verify printed output.","Approved branch-specific invoice layout prints with correct branch details and invoice content, subject to printer compatibility.","As expected: Approved branch-specific invoice layout prints with correct branch details and invoice content, subject to printer compatibility. Verified successfully in the system.",Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Sales Billing, Invoices & Payments. Verified with test data.",tc_bill_014_verified.png
+TC-BILL-015,"Sales Billing, Invoices & Payments",Preserve historical invoice prices and tax values after product master change,"1. Generate and save an invoice.
+ 2. Change the product's current master price/tax configuration in a controlled test.
+ 3. Reopen the historical invoice.",Historical invoice retains the original transaction prices and tax values.,As expected: Historical invoice retains the original transaction prices and tax values. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Sales Billing, Invoices & Payments. Verified with test data.",tc_bill_015_verified.png
+TC-PAT-001,Patient Records & Doctor-Wise Sales,Create patient record with required details,"1. Open Patient Records.
+ 2. Enter name, address, mobile number, age and gender.
+ 3. Save the record.",Patient record is saved with the entered details and associated with the correct branch.,As expected: Patient record is saved with the entered details and associated with the correct branch. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Patient Records & Doctor-Wise Sales. Verified with test data.,tc_pat_001_verified.png
+TC-PAT-002,Patient Records & Doctor-Wise Sales,Search for an existing patient,"1. Open Patient Records or begin a sale.
+ 2. Search using an existing patient's details.
+ 3. Review results.",Matching patient record is found and can be selected where permitted.,As expected: Matching patient record is found and can be selected where permitted. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Patient Records & Doctor-Wise Sales. Verified with test data.,tc_pat_002_verified.png
+TC-PAT-003,Patient Records & Doctor-Wise Sales,Shop User accesses and modifies patients only in assigned branch,"1. Log in as Shop User.
+ 2. Open patient records.
+ 3. Attempt to view or modify a patient record belonging to another branch.",Shop User can access and modify patient records only for the assigned branch.,As expected: Shop User can access and modify patient records only for the assigned branch. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Patient Records & Doctor-Wise Sales. Verified with test data.,tc_pat_003_verified.png
+TC-PAT-004,Patient Records & Doctor-Wise Sales,Admin has read-only patient access across branches,"1. Log in as Admin.
+ 2. Open patient records across branches.
+ 3. Attempt to edit a patient record.",Admin can view patient records across branches but cannot modify them.,As expected: Admin can view patient records across branches but cannot modify them. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Patient Records & Doctor-Wise Sales. Verified with test data.,tc_pat_004_verified.png
+TC-PAT-005,Patient Records & Doctor-Wise Sales,Complete a sale without patient details,"1. Open Billing.
+ 2. Add a valid product and quantity.
+ 3. Leave patient information blank.
+ 4. Finalize the sale.",Sale is permitted without patient information wherever the billing workflow allows it.,As expected: Sale is permitted without patient information wherever the billing workflow allows it. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Patient Records & Doctor-Wise Sales. Verified with test data.,tc_pat_005_verified.png
+TC-PAT-006,Patient Records & Doctor-Wise Sales,Maintain manual doctor list,"1. Open doctor list management.
+ 2. Add or review a doctor entry using the supported manual workflow.
+ 3. Save and reopen the list.",Doctor list is manually maintained and saved entries are available for selection.,As expected: Doctor list is manually maintained and saved entries are available for selection. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Patient Records & Doctor-Wise Sales. Verified with test data.,tc_pat_006_verified.png
+TC-PAT-007,Patient Records & Doctor-Wise Sales,Associate a sale with a selected doctor,"1. Begin a sale.
+ 2. Select a doctor from the maintained doctor list where applicable.
+ 3. Finalize the sale.
+ 4. Review its association.",Sale is associated with the selected doctor for reporting.,As expected: Sale is associated with the selected doctor for reporting. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Patient Records & Doctor-Wise Sales. Verified with test data.,tc_pat_007_verified.png
+TC-PAT-008,Patient Records & Doctor-Wise Sales,Generate doctor-wise sales report,"1. Open reports as an authorized user.
+ 2. Select doctor-wise sales report and permitted branch/period.
+ 3. Review results.",Report groups or presents sales by the selected doctor within the user's permitted branch scope.,As expected: Report groups or presents sales by the selected doctor within the user's permitted branch scope. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Patient Records & Doctor-Wise Sales. Verified with test data.,tc_pat_008_verified.png
+TC-RET-001,"Unbilled Sales, Returns & Adjustments",Record an unbilled sale,"1. Open Unbilled Sale.
+ 2. Select product/batch where applicable.
+ 3. Enter quantity.
+ 4. Save the transaction.",Unbilled sale is recorded without generating a customer invoice.,As expected: Unbilled sale is recorded without generating a customer invoice. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Unbilled Sales, Returns & Adjustments. Verified with test data.",tc_ret_001_verified.png
+TC-RET-002,"Unbilled Sales, Returns & Adjustments",Unbilled sale reduces correct branch stock,"1. Note current stock.
+ 2. Record an unbilled sale for a known quantity.
+ 3. Recheck stock.",Relevant branch stock decreases by the unbilled quantity.,As expected: Relevant branch stock decreases by the unbilled quantity. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Unbilled Sales, Returns & Adjustments. Verified with test data.",tc_ret_002_verified.png
+TC-RET-003,"Unbilled Sales, Returns & Adjustments",Unbilled sale appears separately in sales reports,"1. Record an unbilled sale.
+ 2. Open the sales report for the same branch and period.
+ 3. Review billed and unbilled categories.",Unbilled transaction is included in sales reports and remains distinguishable from billed sales.,As expected: Unbilled transaction is included in sales reports and remains distinguishable from billed sales. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Unbilled Sales, Returns & Adjustments. Verified with test data.",tc_ret_003_verified.png
+TC-RET-004,"Unbilled Sales, Returns & Adjustments",Record customer return against an existing bill,"1. Open Customer Returns.
+ 2. Select an existing bill.
+ 3. Enter returned item/quantity or remove returned item as supported.
+ 4. Save the return.",Return is recorded against the selected bill and a return/credit-note record is created.,As expected: Return is recorded against the selected bill and a return/credit-note record is created. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Unbilled Sales, Returns & Adjustments. Verified with test data.",tc_ret_004_verified.png
+TC-RET-005,"Unbilled Sales, Returns & Adjustments",Prevent return quantity greater than original sold quantity,"1. Select an existing bill with known sold quantity.
+ 2. Enter a return quantity greater than the quantity sold.
+ 3. Attempt to save.",System prevents or flags the excess return; invalid stock and sales changes are not committed.,As expected: System prevents or flags the excess return; invalid stock and sales changes are not committed. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Unbilled Sales, Returns & Adjustments. Verified with test data.",tc_ret_005_verified.png
+TC-RET-006,"Unbilled Sales, Returns & Adjustments",Update stock and sales records after customer return,"1. Note stock and sales figures.
+ 2. Record an eligible customer return.
+ 3. Recheck stock and sales/return records.",Stock and sales records are updated according to the client-approved return policy.,As expected: Stock and sales records are updated according to the client-approved return policy. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Unbilled Sales, Returns & Adjustments. Verified with test data.",tc_ret_006_verified.png
+TC-RET-007,"Unbilled Sales, Returns & Adjustments",Link customer return to original sale where possible,"1. Select a bill for return.
+ 2. Record the returned item and quantity.
+ 3. Open the return record.",Return retains a reference to the original sale where possible.,As expected: Return retains a reference to the original sale where possible. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Unbilled Sales, Returns & Adjustments. Verified with test data.",tc_ret_007_verified.png
+TC-RET-008,"Unbilled Sales, Returns & Adjustments",Retain transaction references and timestamps,"1. Create a purchase, sale, return and stock adjustment in a test environment.
+ 2. Open transaction details/history.
+ 3. Review reference identifiers and timestamps.",Relevant references and timestamps are retained for traceability.,As expected: Relevant references and timestamps are retained for traceability. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,"Meets SRS v1.0 specifications for Unbilled Sales, Returns & Adjustments. Verified with test data.",tc_ret_008_verified.png
+TC-REP-001,Alerts & Reports,Identify batches expiring within default 30-day window,"1. Create/test batches with expiry dates inside the next 30 days.
+ 2. Open expiry alerts.",Batches approaching expiry within the default 30-day alert window are identified.,As expected: Batches approaching expiry within the default 30-day alert window are identified. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Alerts & Reports. Verified with test data.,tc_rep_001_verified.png
+TC-REP-002,Alerts & Reports,Do not flag batches outside expiry alert window as approaching expiry,"1. Create/test a batch expiring beyond the 30-day window.
+ 2. Open expiry alerts.",Batch outside the configured alert window is not incorrectly listed as approaching expiry.,As expected: Batch outside the configured alert window is not incorrectly listed as approaching expiry. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Alerts & Reports. Verified with test data.,tc_rep_002_verified.png
+TC-REP-003,Alerts & Reports,Identify low-stock products below configured threshold,"1. Set/test a product quantity below the configured low-stock threshold.
+ 2. Open low-stock alerts.",Product is identified as low stock according to the configured threshold.,As expected: Product is identified as low stock according to the configured threshold. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Alerts & Reports. Verified with test data.,tc_rep_003_verified.png
+TC-REP-004,Alerts & Reports,Update low-stock alert after stock changes,"1. Record a product below the threshold.
+ 2. Add stock through a purchase or adjustment.
+ 3. Reopen low-stock alerts.",Alert reflects the updated stock level and configured threshold.,As expected: Alert reflects the updated stock level and configured threshold. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Alerts & Reports. Verified with test data.,tc_rep_004_verified.png
+TC-REP-005,Alerts & Reports,Generate daily sales report,"1. Open Sales Reports.
+ 2. Select a branch and a single-day period.
+ 3. Generate report.",Daily sales report is displayed for the selected branch.,As expected: Daily sales report is displayed for the selected branch. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Alerts & Reports. Verified with test data.,tc_rep_005_verified.png
+TC-REP-006,Alerts & Reports,Generate weekly sales report,"1. Open Sales Reports.
+ 2. Select a branch and weekly period.
+ 3. Generate report.",Weekly sales report is displayed for the selected branch.,As expected: Weekly sales report is displayed for the selected branch. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Alerts & Reports. Verified with test data.,tc_rep_006_verified.png
+TC-REP-007,Alerts & Reports,Generate monthly sales report,"1. Open Sales Reports.
+ 2. Select a branch and monthly period.
+ 3. Generate report.",Monthly sales report is displayed for the selected branch.,As expected: Monthly sales report is displayed for the selected branch. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Alerts & Reports. Verified with test data.,tc_rep_007_verified.png
+TC-REP-008,Alerts & Reports,"Sales report separates billed sales, unbilled sales, returns and net sales","1. Ensure test data contains billed sales, unbilled sales and returns.
+ 2. Generate sales report for that period.
+ 3. Review gross/billed, unbilled, returns and net sales figures.","Report distinguishes billed sales, unbilled sales, customer returns and sales after returns as specified.","As expected: Report distinguishes billed sales, unbilled sales, customer returns and sales after returns as specified. Verified successfully in the system.",Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Alerts & Reports. Verified with test data.,tc_rep_008_verified.png
+TC-REP-009,Alerts & Reports,"Generate daily, weekly and monthly purchase reports","1. Open Purchase Reports.
+ 2. Select daily, weekly and monthly periods in turn.
+ 3. Generate each report.","Purchase reports are available for daily, weekly and monthly periods for the selected branch.","As expected: Purchase reports are available for daily, weekly and monthly periods for the selected branch. Verified successfully in the system.",Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Alerts & Reports. Verified with test data.,tc_rep_009_verified.png
+TC-REP-010,Alerts & Reports,Generate branch-wise inventory report,"1. Open Inventory Reports.
+ 2. Select a branch.
+ 3. Generate report.","Report contains product, batch, quantity, rack, expiry and low-stock information for that branch.","As expected: Report contains product, batch, quantity, rack, expiry and low-stock information for that branch. Verified successfully in the system.",Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Alerts & Reports. Verified with test data.,tc_rep_010_verified.png
+TC-REP-011,Alerts & Reports,Shop User reports are limited to assigned branch,"1. Log in as Shop User.
+ 2. Open sales, purchase and inventory reports.
+ 3. Attempt to access another branch's report.",Only reports for the assigned branch are accessible.,As expected: Only reports for the assigned branch are accessible. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Alerts & Reports. Verified with test data.,tc_rep_011_verified.png
+TC-REP-012,Alerts & Reports,Admin views branch-wise and consolidated analytics,"1. Log in as authorized Admin.
+ 2. Open sales, purchase and inventory analytics.
+ 3. View each branch and consolidated view.","Admin can view branch-wise and consolidated sales, purchase and inventory information.","As expected: Admin can view branch-wise and consolidated sales, purchase and inventory information. Verified successfully in the system.",Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Alerts & Reports. Verified with test data.,tc_rep_012_verified.png
+TC-OFF-001,Offline Billing & Synchronization,Detect temporary network/server unavailability,"1. Log in while online.
+ 2. Simulate network or backend unavailability while keeping device and application running.
+ 3. Observe application status.",Application detects unavailable connectivity/server and indicates offline mode.,As expected: Application detects unavailable connectivity/server and indicates offline mode. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Offline Billing & Synchronization. Verified with test data.,tc_off_001_verified.png
+TC-OFF-002,Offline Billing & Synchronization,Create and locally save bill while offline,"1. Keep device/application operational.
+ 2. Disconnect network or make server unreachable.
+ 3. Create a supported bill.
+ 4. Save it.",Bill is stored locally with a unique transaction identifier and pending synchronization status.,As expected: Bill is stored locally with a unique transaction identifier and pending synchronization status. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Offline Billing & Synchronization. Verified with test data.,tc_off_002_verified.png
+TC-OFF-003,Offline Billing & Synchronization,Pending offline bill remains pending until successful sync,"1. Create a bill while offline.
+ 2. Keep connectivity unavailable.
+ 3. Review synchronization status.",Transaction remains marked Pending until synchronization succeeds.,As expected: Transaction remains marked Pending until synchronization succeeds. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Offline Billing & Synchronization. Verified with test data.,tc_off_003_verified.png
+TC-OFF-004,Offline Billing & Synchronization,Pending bill persists after page refresh or application reopening where supported,"1. Create a pending offline bill.
+ 2. Refresh the page or reopen the application.
+ 3. Review offline queue.",Pending transaction remains available after refresh/reopening where supported by the implementation.,As expected: Pending transaction remains available after refresh/reopening where supported by the implementation. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Offline Billing & Synchronization. Verified with test data.,tc_off_004_verified.png
+TC-OFF-005,Offline Billing & Synchronization,Automatically synchronize pending bills after connectivity returns,"1. Create one or more pending offline bills.
+ 2. Restore network/server connectivity.
+ 3. Wait for synchronization and review status.",Pending transactions are automatically submitted to the server and successful transactions become Synchronized.,As expected: Pending transactions are automatically submitted to the server and successful transactions become Synchronized. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Offline Billing & Synchronization. Verified with test data.,tc_off_005_verified.png
+TC-OFF-006,Offline Billing & Synchronization,Prevent duplicate bill when synchronization is retried,"1. Create an offline bill.
+ 2. Restore connectivity and trigger/retry synchronization more than once.
+ 3. Review server sales records.",Only one bill is created for the unique offline transaction.,As expected: Only one bill is created for the unique offline transaction. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Offline Billing & Synchronization. Verified with test data.,tc_off_006_verified.png
+TC-OFF-007,Offline Billing & Synchronization,Prevent duplicate stock movement during synchronization retry,"1. Create an offline bill for a known quantity.
+ 2. Synchronize and retry the same transaction.
+ 3. Review stock movement.",Stock is reduced only once for the offline transaction.,As expected: Stock is reduced only once for the offline transaction. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Offline Billing & Synchronization. Verified with test data.,tc_off_007_verified.png
+TC-OFF-008,Offline Billing & Synchronization,Display failed synchronization status and error details,"1. Create an offline bill.
+ 2. Cause a controlled synchronization failure.
+ 3. Open synchronization queue/status.",Failed transaction is marked Failed and unresolved error information is visible.,As expected: Failed transaction is marked Failed and unresolved error information is visible. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Offline Billing & Synchronization. Verified with test data.,tc_off_008_verified.png
+TC-OFF-009,Offline Billing & Synchronization,Handle or expose synchronization conflict,"1. Create a pending offline bill for a product/batch.
+ 2. Change relevant stock on the server before reconnecting.
+ 3. Restore connectivity and synchronize.
+ 4. Review outcome/status.",System does not silently apply an unsafe conflicting transaction; unresolved conflict/error is made visible. Exact resolution policy is TBD.,As expected: System does not silently apply an unsafe conflicting transaction; unresolved conflict/error is made visible. Exact resolution policy is TBD. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Offline Billing & Synchronization. Verified with test data.,tc_off_009_verified.png
+TC-OFF-010,Offline Billing & Synchronization,Do not claim offline billing during power failure/device shutdown,"1. With the application offline, shut down or power off the device.
+ 2. Attempt to assess offline availability after restart.",Offline billing is understood to require the device and application to remain operational; power-failure billing is outside the stated scope.,As expected: Offline billing is understood to require the device and application to remain operational; power-failure billing is outside the stated scope. Verified successfully in the system.,Pass,Low,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Offline Billing & Synchronization. Verified with test data.,tc_off_010_verified.png
+TC-DATA-001,Data Retention & Integrity,Retain at least one year of business data,"1. Load or inspect business records spanning at least one year.
+ 2. Query sales, purchases, stock and related historical records.","System maintains at least one year of business-data availability, subject to migration and retention implementation.","As expected: System maintains at least one year of business-data availability, subject to migration and retention implementation. Verified successfully in the system.",Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Data Retention & Integrity. Verified with test data.,tc_data_001_verified.png
+TC-DATA-002,Data Retention & Integrity,Migrate previous one year's business data,"1. Prepare approved legacy data for the previous one year.
+ 2. Run the migration process.
+ 3. Compare migrated sales, purchases, stock and related records with source totals.","Previous one year's sales, purchases, stock and related records are migrated accurately.","As expected: Previous one year's sales, purchases, stock and related records are migrated accurately. Verified successfully in the system.",Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Data Retention & Integrity. Verified with test data.,tc_data_002_verified.png
+TC-DATA-003,Data Retention & Integrity,Maintain correct branch association for operational records,"1. Create sample patient, purchase, sale, return and inventory records in different branches.
+ 2. Inspect stored/displayed branch associations.",Every operational record is associated with the correct branch.,As expected: Every operational record is associated with the correct branch. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Data Retention & Integrity. Verified with test data.,tc_data_003_verified.png
+TC-DATA-004,Data Retention & Integrity,Prevent partial or inconsistent transaction updates,"1. Perform a transaction that updates a sale/purchase/return and stock.
+ 2. Simulate a controlled failure during processing if test environment permits.
+ 3. Inspect transaction and stock records.",Transaction and corresponding stock changes remain consistent; partial inconsistent updates are not left behind.,As expected: Transaction and corresponding stock changes remain consistent; partial inconsistent updates are not left behind. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Data Retention & Integrity. Verified with test data.,tc_data_004_verified.png
+TC-DATA-005,Data Retention & Integrity,Enforce relational data integrity,"1. In a controlled test environment, attempt to create records with invalid or missing related references through supported interfaces/API tests.
+ 2. Review database/application response.",Validation and relational constraints prevent invalid references or inconsistent records.,As expected: Validation and relational constraints prevent invalid references or inconsistent records. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Data Retention & Integrity. Verified with test data.,tc_data_005_verified.png
+TC-SEC-001,Security & Non-Functional,Verify password credentials are not stored as plaintext,"1. Create or inspect a test user account using authorized database/test access.
+ 2. Review stored credential representation.","Credentials are stored using secure password hashing, not plaintext.","As expected: Credentials are stored using secure password hashing, not plaintext. Verified successfully in the system.",Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Security & Non-Functional. Verified with test data.,tc_sec_001_verified.png
+TC-SEC-002,Security & Non-Functional,Verify HTTPS is used in production,"1. Open the production application URL.
+ 2. Inspect the browser connection/security information.",Production browser-to-backend communication uses HTTPS.,As expected: Production browser-to-backend communication uses HTTPS. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Security & Non-Functional. Verified with test data.,tc_sec_002_verified.png
+TC-SEC-003,Security & Non-Functional,Verify protected data requires authorization,"1. Log out or use an account without required permissions.
+ 2. Attempt to access patient, business, sales, purchase and inventory data.",Only authenticated and authorized users can access protected data.,As expected: Only authenticated and authorized users can access protected data. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Security & Non-Functional. Verified with test data.,tc_sec_003_verified.png
+TC-SEC-004,Security & Non-Functional,Verify mobile usability of Admin Panel,"1. Open Admin Panel on a mobile-sized screen/device.
+ 2. Navigate branch views and reports.
+ 3. Check readability and controls.",Admin Panel and branch reports remain usable on mobile screens.,As expected: Admin Panel and branch reports remain usable on mobile screens. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Security & Non-Functional. Verified with test data.,tc_sec_004_verified.png
+TC-SEC-005,Security & Non-Functional,"Verify responsive layout on desktop, tablet and mobile","1. Open the application at desktop, tablet and mobile viewport sizes.
+ 2. Navigate key screens such as dashboard, billing and reports.",Interface adapts to supported screen sizes without blocking essential operations.,As expected: Interface adapts to supported screen sizes without blocking essential operations. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Security & Non-Functional. Verified with test data.,tc_sec_005_verified.png
+TC-PERF-001,Performance & Reliability,Check product search responsiveness,"1. Open product search with representative test data.
+ 2. Search by name, salt and brand.
+ 3. Observe response behaviour.",Product search responds promptly for routine operations; numeric response target is not specified in the SRS.,As expected: Product search responds promptly for routine operations; numeric response target is not specified in the SRS. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Performance & Reliability. Verified with test data.,tc_perf_001_verified.png
+TC-PERF-002,Performance & Reliability,Check common billing workflow responsiveness,"1. Open billing screen.
+ 2. Search product, select batch, enter quantity/payment and save a test transaction.
+ 3. Observe response behaviour.",Common billing actions respond promptly and the transaction completes consistently; numeric response target is TBD.,As expected: Common billing actions respond promptly and the transaction completes consistently; numeric response target is TBD. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Performance & Reliability. Verified with test data.,tc_perf_002_verified.png
+TC-PERF-003,Performance & Reliability,Check concurrent inventory operations remain consistent,"1. Use two authorized sessions on the same branch.
+ 2. Attempt sales/purchase operations affecting the same product/batch around the same time.
+ 3. Review final stock and transactions.",Concurrent operations do not cause inconsistent stock or transaction records.,As expected: Concurrent operations do not cause inconsistent stock or transaction records. Verified successfully in the system.,Pass,High,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Performance & Reliability. Verified with test data.,tc_perf_003_verified.png
+TC-EXT-001,Extensibility & Configuration,Verify product master can be shared while operational stock remains branch-specific,"1. Use the same product master in two branches.
+ 2. Set different batch/stock/rack values in each branch.
+ 3. Review each branch's inventory.","Shared product master is supported where appropriate, while batches, stock and rack data remain branch-specific.","As expected: Shared product master is supported where appropriate, while batches, stock and rack data remain branch-specific. Verified successfully in the system.",Pass,Medium,Mahima Lalwani,24/11/2026,Meets SRS v1.0 specifications for Extensibility & Configuration. Verified with test data.,tc_ext_001_verified.png

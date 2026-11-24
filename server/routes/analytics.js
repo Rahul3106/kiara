@@ -108,7 +108,7 @@ async function metricsForBranch(branchId, period) {
 
 router.get("/branch", authenticateToken, async (req, res) => {
   try {
-    if (req.user.role !== "SHOP_USER") {
+    if (!["SHOP_USER", "SHOP_MANAGER"].includes(req.user.role)) {
       return res.status(403).json({
         success: false,
         message: "Shop branch analytics only.",

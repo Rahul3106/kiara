@@ -1,8 +1,12 @@
 const express = require("express");
-const authRoutes = require("./routes/auth");
+const path = require("path");
+const fs = require("fs");
 const cors = require("cors");
-require("dotenv").config();
+const { env, validateEnv } = require("./config/env");
 
+validateEnv();
+
+const authRoutes = require("./routes/auth");
 const pool = require("./db");
 const productRoutes = require("./routes/products");
 const inventoryRoutes = require("./routes/inventory");
@@ -18,9 +22,14 @@ const {
 } = require("./middleware/auth");
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = env.port;
 
-app.use(cors());
+app.use(
+  cors({
+    origin: env.corsOrigins === "*" ? true : env.corsOrigins,
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
@@ -32,9 +41,21 @@ app.use("/api/returns", returnRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/alerts", alertRoutes);
 
-app.get("/", (req, res) => {
+app.get("/api", (req, res) => {
   res.json({
+    success: true,
     message: "Kiara Medicals API is running!",
+    environment: env.nodeEnv,
+  });
+});
+
+app.get("/api/health", (req, res) => {
+  res.json({
+    success: true,
+    status: "ok",
+    environment: env.nodeEnv,
+    dbMode: pool.isMockMode() ? "mock" : "mysql",
+    uptimeSeconds: Math.round(process.uptime()),
   });
 });
 
@@ -49,6 +70,7 @@ app.get("/api/health/db", async (req, res) => {
       message: "MySQL connection successful!",
       database: rows[0].databaseName,
       version: rows[0].mysqlVersion,
+      dbMode: pool.isMockMode() ? "mock" : "mysql",
     });
   } catch (error) {
     console.error("Database connection error:", error.message);
@@ -82,7 +104,44 @@ app.get(
   }
 );
 
-app.listen(PORT, () => {
+// Return JSON 404 for unknown API endpoints
+app.use("/api", (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `API endpoint not found: ${req.method} ${req.originalUrl}`,
+  });
+});
+
+// Serve built frontend assets whenever client/dist exists; otherwise show API status at /
+const clientDistPath = path.join(__dirname, "../client/dist");
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+  app.use((req, res, next) => {
+    if (req.method === "GET" && !req.path.startsWith("/api")) {
+      return res.sendFile(path.join(clientDistPath, "index.html"));
+    }
+    next();
+  });
+} else {
+  app.get("/", (req, res) => {
+    res.json({
+      message: "Kiara Medicals API is running!",
+      environment: env.nodeEnv,
+    });
+  });
+}
+
+const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+});
+
+process.on("SIGTERM", () => {
+  console.log("SIGTERM received. Shutting down gracefully...");
+  server.close(() => process.exit(0));
+});
+
+process.on("SIGINT", () => {
+  console.log("SIGINT received. Shutting down gracefully...");
+  server.close(() => process.exit(0));
 });
 

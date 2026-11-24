@@ -5,30 +5,30 @@ INSERT INTO branches (
 ) VALUES
 (
   'BR001',
-  'Kiara Medicals — Koramangala',
-  'Kiara Medicals Koramangala Pvt Ltd',
+  'Kiara Medicals A',
+  'Kiara Medicals A Pvt Ltd',
   '12th Main, Koramangala 5th Block, Bengaluru, Karnataka 560034',
   '08025551234',
   '29AABCK1234A1Z5',
-  'KM-KOR'
+  'KM-A'
 ),
 (
   'BR002',
-  'Kiara Medicals — Indiranagar',
-  'Kiara Medicals Indiranagar Pvt Ltd',
+  'Kiara Medicals B',
+  'Kiara Medicals B Pvt Ltd',
   '100 Feet Road, Indiranagar, Bengaluru, Karnataka 560038',
   '08025555678',
   '29AABCK5678B1Z3',
-  'KM-IND'
+  'KM-B'
 ),
 (
   'BR003',
-  'Kiara Medicals — Whitefield',
-  'Kiara Medicals Whitefield Pvt Ltd',
+  'Kiara Medicals C',
+  'Kiara Medicals C Pvt Ltd',
   'ITPL Main Road, Whitefield, Bengaluru, Karnataka 560066',
   '08025559012',
   '29AABCK9012C1Z1',
-  'KM-WHT'
+  'KM-C'
 );
 
 INSERT INTO salts (salt_name) VALUES

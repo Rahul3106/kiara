@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: kiara-medicals
+    runtime: node
+    plan: free
+    buildCommand: npm run install:all && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "5000"
+      - key: DB_SSL
+        value: "true"
+      - key: DB_USE_MOCK
+        value: "false"
+      - key: JWT_EXPIRES_IN
+        value: 8h
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        value: https://kiara-medicals.onrender.com

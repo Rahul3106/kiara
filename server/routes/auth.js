@@ -2,6 +2,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
+const { env } = require("../config/env");
 
 const router = express.Router();
 
@@ -23,7 +24,7 @@ router.post("/login", async (req, res) => {
     }
 
     // 2. Ensure JWT secret is configured
-    if (!process.env.JWT_SECRET) {
+    if (!env.jwt.secret) {
       console.error("JWT_SECRET is missing from environment.");
       return res.status(500).json({
         success: false,
@@ -74,7 +75,8 @@ router.post("/login", async (req, res) => {
     }
 
     // 5. Enforce role and branch rules
-    if (user.role === "SHOP_USER") {
+    const isShopRole = ["SHOP_USER", "SHOP_MANAGER"].includes(user.role);
+    if (isShopRole) {
       if (
         user.branch_id == null ||
         !user.branch_name ||
@@ -105,10 +107,10 @@ router.post("/login", async (req, res) => {
         role: user.role,
         branchId: user.branch_id == null ? null : String(user.branch_id),
       },
-      process.env.JWT_SECRET,
+      env.jwt.secret,
       {
         subject: String(user.user_id),
-        expiresIn: process.env.JWT_EXPIRES_IN || "8h",
+        expiresIn: env.jwt.expiresIn,
       }
     );
 

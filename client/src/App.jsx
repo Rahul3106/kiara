@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
+import {
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import "./App.css";
+import ENV from "./config/env.js";
+import { numberToWordsIndian } from "./utils/numberToWords.js";
 import {
   AdminBranches,
   AdminBranchSales,
@@ -21,10 +32,91 @@ import {
 } from "./ShopOperations.jsx";
 import { MedicineSearchRow } from "./MedicineSearchRow.jsx";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5001";
+const API_URL = ENV.API_URL;
+const SESSION_STORAGE_KEY = "kiara_medicals_session";
+
+function readStoredSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.token && parsed.user) {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSession(sessionData) {
+  try {
+    if (sessionData) {
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionData));
+    } else {
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage quota / private mode issues
+  }
+}
+
+function AdminBranchSalesRoute({ apiUrl, token, branches, selectedBranch, onBack }) {
+  const { branchId } = useParams();
+  const numericId = Number(branchId);
+  const matched =
+    (branches || []).find((b) => Number(b.branch_id) === numericId) || null;
+  const resolvedBranch =
+    selectedBranch && Number(selectedBranch.id) === numericId
+      ? selectedBranch
+      : {
+          id: numericId,
+          name: matched?.branch_name || `Branch ${branchId}`,
+        };
+
+  return (
+    <AdminBranchSales
+      apiUrl={apiUrl}
+      token={token}
+      branch={resolvedBranch}
+      onBack={onBack}
+    />
+  );
+}
+
+function formatExpiryMMYY(expStr) {
+  if (!expStr) return "—";
+  const str = String(expStr).trim();
+  const parts = str.split("-");
+  if (parts.length >= 2) {
+    const yr = parts[0].slice(-2);
+    const mo = parts[1];
+    return `${mo}/${yr}`;
+  }
+  return str;
+}
+
+function formatDateDDMMYYYY(dateInput) {
+  if (!dateInput) {
+    const d = new Date();
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
+  }
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return String(dateInput).slice(0, 10);
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+}
 
 
 function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [inventory, setInventory] = useState([]);
@@ -33,31 +125,58 @@ function App() {
   const [inventoryError, setInventoryError] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [session, setSession] = useState(null);
+  const [session, setSession] = useState(() => readStoredSession());
 
-  const [activePage, setActivePage] = useState("dashboard");
+  const currentPath = location.pathname;
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [adminBranches, setAdminBranches] = useState([]);
 
   const [billingBranchId, setBillingBranchId] = useState("");
-const [billingSearch, setBillingSearch] = useState("");
-const [billingResults, setBillingResults] = useState([]);
-const [cart, setCart] = useState([]);
-const [patient, setPatient] = useState({
-  name: "",
-  age: "",
-  mobile: "",
-  gender: "",
-  doctorName: "",
-});
-const [paymentMethod, setPaymentMethod] = useState("CASH");
-const [billDiscount, setBillDiscount] = useState("0");
-const [billingLoading, setBillingLoading] = useState(false);
-const [savingBill, setSavingBill] = useState(false);
-const [billingError, setBillingError] = useState("");
-const [savedBill, setSavedBill] = useState(null);
-const [patientSuggestions, setPatientSuggestions] = useState([]);
+  const [billingSearch, setBillingSearch] = useState("");
+  const [billingResults, setBillingResults] = useState([]);
+  const [cart, setCart] = useState([]);
+  const [patient, setPatient] = useState({
+    name: "",
+    age: "",
+    mobile: "",
+    gender: "",
+    doctorName: "",
+    address: "",
+    doctorRegNo: "",
+  });
+  const [paymentMethod, setPaymentMethod] = useState("CASH");
+  const [billDiscount, setBillDiscount] = useState("0");
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [savingBill, setSavingBill] = useState(false);
+  const [billingError, setBillingError] = useState("");
+  const [savedBill, setSavedBill] = useState(null);
+  const [patientSuggestions, setPatientSuggestions] = useState([]);
+
+  // Validate stored token on mount so expired/invalid sessions redirect cleanly to /login
+  useEffect(() => {
+    const stored = readStoredSession();
+    if (!stored?.token) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${stored.token}` },
+        });
+        if (!res.ok && !cancelled) {
+          writeStoredSession(null);
+          setSession(null);
+        }
+      } catch {
+        // Keep session if server is temporarily unreachable
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -77,8 +196,17 @@ const [patientSuggestions, setPatientSuggestions] = useState([]);
         throw new Error(data.message || "Login failed.");
       }
 
-      setSession({ token: data.token, user: data.user });
+      const nextSession = { token: data.token, user: data.user };
+      writeStoredSession(nextSession);
+      setSession(nextSession);
       setPassword("");
+
+      const targetFrom = location.state?.from?.pathname;
+      const redirectTo =
+        targetFrom && targetFrom !== "/login" && targetFrom !== "/"
+          ? targetFrom
+          : "/dashboard";
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(
         err.message === "Failed to fetch"
@@ -91,22 +219,23 @@ const [patientSuggestions, setPatientSuggestions] = useState([]);
   }
 
   function handleLogout() {
-  setSession(null);
-  setUsername("");
-  setPassword("");
-  setError("");
-  setActivePage("dashboard");
-  setMobileNavOpen(false);
-  setSelectedBranch(null);
-  setBillingBranchId("");
-  setInventorySearch(""); 
-  setInventory([]);
-  setCart([]);
-  setBillingResults([]);
-  setBillingSearch("");
-  setBillingError("");
-  setSavedBill(null);
-}
+    writeStoredSession(null);
+    setSession(null);
+    setUsername("");
+    setPassword("");
+    setError("");
+    setMobileNavOpen(false);
+    setSelectedBranch(null);
+    setBillingBranchId("");
+    setInventorySearch("");
+    setInventory([]);
+    setCart([]);
+    setBillingResults([]);
+    setBillingSearch("");
+    setBillingError("");
+    setSavedBill(null);
+    navigate("/login", { replace: true });
+  }
 
 
   
@@ -348,10 +477,10 @@ const finalTotal = Math.max(
   useEffect(() => {
     if (!session) return;
 
-    if (activePage === "inventory" && session.user.role !== "ADMIN") {
+    if (currentPath === "/inventory" && session.user.role !== "ADMIN") {
       loadInventory(inventorySearch);
     }
-  }, [session, activePage]);
+  }, [session, currentPath]);
 
   useEffect(() => {
     document.body.style.overflow = mobileNavOpen ? "hidden" : "";
@@ -361,7 +490,7 @@ const finalTotal = Math.max(
   }, [mobileNavOpen]);
 
   useEffect(() => {
-    if (!session?.token || activePage !== "billing" || savedBill) return;
+    if (!session?.token || currentPath !== "/billing" || savedBill) return;
 
     const query = billingSearch.trim();
     if (query.length < 2) {
@@ -374,10 +503,10 @@ const finalTotal = Math.max(
     }, 350);
 
     return () => window.clearTimeout(timer);
-  }, [billingSearch, activePage, savedBill, session, searchBillingMedicines]);
+  }, [billingSearch, currentPath, savedBill, session, searchBillingMedicines]);
 
   useEffect(() => {
-    if (!session?.token || activePage !== "billing" || savedBill) {
+    if (!session?.token || currentPath !== "/billing" || savedBill) {
       setPatientSuggestions([]);
       return;
     }
@@ -410,7 +539,7 @@ const finalTotal = Math.max(
   }, [
     patient.name,
     patient.mobile,
-    activePage,
+    currentPath,
     savedBill,
     session,
   ]);
@@ -422,6 +551,8 @@ const finalTotal = Math.max(
       mobile: entry.mobile || "",
       gender: entry.gender || "",
       doctorName: entry.doctorName || "",
+      address: entry.address || "",
+      doctorRegNo: entry.doctorRegNo || "",
     });
     setPatientSuggestions([]);
   }
@@ -477,6 +608,8 @@ const finalTotal = Math.max(
         `Mobile: ${patient.mobile || "N/A"}`,
         `Gender: ${patient.gender || "N/A"}`,
         `Doctor: ${patient.doctorName || "N/A"}`,
+        `Address: ${patient.address || "N/A"}`,
+        `Dr Reg No: ${patient.doctorRegNo || "N/A"}`,
       ].join(" | "),
       patientName: patient.name.trim(),
       patientMobile: patient.mobile.trim(),
@@ -537,6 +670,8 @@ setSavedBill({
       mobile: "",
       gender: "",
       doctorName: "",
+      address: "",
+      doctorRegNo: "",
     });
     setBillingSearch("");
     setBillingResults([]);
@@ -558,340 +693,102 @@ function printInvoice() {
   window.print();
 }
 
+  const loginView = (
+    <main className="login-page">
+      <section className="login-card">
+        <div className="login-brand">
+          <div className="brand-icon large">K</div>
+          <p className="eyebrow">WELCOME TO</p>
+          <h1>
+            {savedBill?.legalName ||
+              savedBill?.branchName ||
+              ENV.APP_NAME.toUpperCase()}
+          </h1>
+          <p className="subtitle">
+            Your medical store, managed smarter.
+          </p>
+        </div>
+
+        <div className="form-heading">
+          <h2>Sign in to your account</h2>
+          <p>Enter your credentials to continue.</p>
+        </div>
+
+        <form onSubmit={handleLogin}>
+          <label htmlFor="username">Username</label>
+          <input
+            id="username"
+            type="text"
+            placeholder="Enter your username"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            autoComplete="username"
+            required
+          />
+
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            type="password"
+            placeholder="Enter your password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="current-password"
+            required
+          />
+
+          {error && (
+            <div className="error-message" role="alert">
+              {error}
+            </div>
+          )}
+
+          <button
+            className="login-button"
+            type="submit"
+            disabled={loading}
+          >
+            {loading ? "Signing in..." : "Sign in"}
+          </button>
+        </form>
+
+        <p className="security-note">
+          Secure access for authorized Kiara Medicals staff.
+        </p>
+      </section>
+
+      <footer className="login-footer">
+        Kiara Medicals · Medical Store Management
+      </footer>
+    </main>
+  );
+
   if (!session) {
     return (
-      <main className="login-page">
-        <section className="login-card">
-          <div className="login-brand">
-            <div className="brand-icon large">K</div>
-            <p className="eyebrow">WELCOME TO</p>
-            <h1>
-  {savedBill?.legalName ||
-    savedBill?.branchName ||
-    "KIARA MEDICALS"}
-</h1>
-            <p className="subtitle">
-              Your medical store, managed smarter.
-            </p>
-          </div>
-
-          <div className="form-heading">
-            <h2>Sign in to your account</h2>
-            <p>Enter your credentials to continue.</p>
-          </div>
-
-          <form onSubmit={handleLogin}>
-            <label htmlFor="username">Username</label>
-            <input
-              id="username"
-              type="text"
-              placeholder="Enter your username"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              autoComplete="username"
-              required
-            />
-
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="current-password"
-              required
-            />
-
-            {error && (
-              <div className="error-message" role="alert">
-                {error}
-              </div>
-            )}
-
-            <button
-              className="login-button"
-              type="submit"
-              disabled={loading}
-            >
-              {loading ? "Signing in..." : "Sign in"}
-            </button>
-          </form>
-
-          <p className="security-note">
-            Secure access for authorized Kiara Medicals staff.
-          </p>
-        </section>
-
-        <footer className="login-footer">
-          Kiara Medicals · Medical Store Management
-        </footer>
-      </main>
+      <Routes>
+        <Route path="/login" element={loginView} />
+        <Route
+          path="*"
+          element={<Navigate to="/login" state={{ from: location }} replace />}
+        />
+      </Routes>
     );
   }
 
   const { user } = session;
   const isAdmin = user.role === "ADMIN";
+  const isShopManager = user.role === "SHOP_MANAGER";
+  const canManageShop = !isAdmin && (isShopManager || user.role === "SHOP_USER");
+  const roleDisplayTitle = isAdmin
+    ? "Administrator"
+    : isShopManager
+    ? "Shop Manager"
+    : "Shop User";
 
-  return (
-    <main className="dashboard-page">
-      <header className="topbar">
-        <div className="topbar-start">
-          <button
-            type="button"
-            className="menu-toggle"
-            aria-expanded={mobileNavOpen}
-            aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
-            onClick={() => setMobileNavOpen((open) => !open)}
-          >
-            <span className="menu-toggle-bar" />
-            <span className="menu-toggle-bar" />
-            <span className="menu-toggle-bar" />
-          </button>
-          <div className="brand">
-            <div className="brand-icon">K</div>
-            <div className="brand-text">
-              <h1>Kiara Medicals</h1>
-              <p>Medical Store Management System</p>
-            </div>
-          </div>
-        </div>
+  const navClass = ({ isActive }) => `nav-item ${isActive ? "active" : ""}`;
 
-        <button className="logout-button" onClick={handleLogout}>
-          Logout
-        </button>
-      </header>
-
-      {mobileNavOpen && (
-        <button
-          type="button"
-          className="sidebar-overlay"
-          aria-label="Close menu"
-          onClick={() => setMobileNavOpen(false)}
-        />
-      )}
-
-      <div className="app-layout">
-        <aside
-          className={`app-sidebar ${mobileNavOpen ? "is-open" : ""}`}
-          onClick={(event) => {
-            if (event.target.closest(".nav-item")) {
-              setMobileNavOpen(false);
-            }
-          }}
-        >
-          <p className="sidebar-label">MAIN MENU</p>
-
-          <button
-            className={`nav-item ${
-              activePage === "dashboard" ? "active" : ""
-            }`}
-            onClick={() => setActivePage("dashboard")}
-          >
-            <span>▦</span> Dashboard
-          </button>
-
-          {!isAdmin && (
-            <>
-              <button
-                className={`nav-item ${
-                  activePage === "inventory" ? "active" : ""
-                }`}
-                onClick={() => {
-                  setActivePage("inventory");
-                  setInventoryError("");
-                }}
-              >
-                <span>▤</span> Inventory
-              </button>
-
-              <button
-                className={`nav-item ${activePage === "billing" ? "active" : ""}`}
-                onClick={() => {
-                  setActivePage("billing");
-                  setBillingError("");
-                  setSavedBill(null);
-                }}
-              >
-                <span>▣</span> Billing
-              </button>
-              <button
-                className={`nav-item ${activePage === "unbilled" ? "active" : ""}`}
-                onClick={() => setActivePage("unbilled")}
-              >
-                <span>◌</span> Unbilled
-              </button>
-              <button
-                className={`nav-item ${activePage === "past-bills" ? "active" : ""}`}
-                onClick={() => setActivePage("past-bills")}
-              >
-                <span>▤</span> Past bills
-              </button>
-              <button
-                className={`nav-item ${activePage === "purchase" ? "active" : ""}`}
-                onClick={() => setActivePage("purchase")}
-              >
-                <span>⊕</span> Purchase
-              </button>
-              <button
-                className={`nav-item ${activePage === "customer-return" ? "active" : ""}`}
-                onClick={() => setActivePage("customer-return")}
-              >
-                <span>↩</span> Cust. return
-              </button>
-              <button
-                className={`nav-item ${activePage === "supplier-return" ? "active" : ""}`}
-                onClick={() => setActivePage("supplier-return")}
-              >
-                <span>↪</span> Supp. return
-              </button>
-              <button
-                className={`nav-item ${activePage === "edit-bill" ? "active" : ""}`}
-                onClick={() => setActivePage("edit-bill")}
-              >
-                <span>✎</span> Edit bill
-              </button>
-              <button
-                className={`nav-item ${activePage === "alerts" ? "active" : ""}`}
-                onClick={() => setActivePage("alerts")}
-              >
-                <span>!</span> Alerts
-              </button>
-            </>
-          )}
-
-          {isAdmin && (
-            <>
-              <button
-                className={`nav-item ${
-                  activePage === "medicine-master" ? "active" : ""
-                }`}
-                onClick={() => setActivePage("medicine-master")}
-              >
-                <span>◫</span> Medicine Master
-              </button>
-              <button
-                className={`nav-item ${
-                  activePage === "admin-inventory" ? "active" : ""
-                }`}
-                onClick={() => setActivePage("admin-inventory")}
-              >
-                <span>▤</span> Inventory
-              </button>
-              <button
-                className={`nav-item ${
-                  activePage === "branches" ? "active" : ""
-                }`}
-                onClick={() => setActivePage("branches")}
-              >
-                <span>⌂</span> Branches
-              </button>
-              <button
-                className={`nav-item ${activePage === "users" ? "active" : ""}`}
-                onClick={() => setActivePage("users")}
-              >
-                <span>◎</span> Users
-              </button>
-            </>
-          )}
-
-          
-
-          <div className="sidebar-user">
-            <div className="sidebar-avatar">
-              {(user.fullName || user.username || "U")
-                .charAt(0)
-                .toUpperCase()}
-            </div>
-            <div>
-              <strong>{user.fullName}</strong>
-              <small>{isAdmin ? "Administrator" : "Shop User"}</small>
-            </div>
-          </div>
-        </aside>
-
-        <section className="app-content">
-  {activePage === "dashboard" ? (
-  isAdmin ? (
-    <AdminDashboard
-      apiUrl={API_URL}
-      token={session.token}
-      onSelectBranchSales={(branch) => {
-        setSelectedBranch(branch);
-        setActivePage("branch-sales");
-      }}
-    />
-  ) : (
-    <ShopDashboard
-      apiUrl={API_URL}
-      token={session.token}
-      branchName={user.branchName}
-      userName={user.fullName}
-    />
-  )
-) : activePage === "branch-sales" && isAdmin ? (
-  <AdminBranchSales
-    apiUrl={API_URL}
-    token={session.token}
-    branch={selectedBranch}
-    onBack={() => setActivePage("dashboard")}
-  />
-) : activePage === "medicine-master" && isAdmin ? (
-  <AdminMedicineMaster apiUrl={API_URL} token={session.token} />
-) : activePage === "admin-inventory" && isAdmin ? (
-  <AdminInventoryReadOnly
-    apiUrl={API_URL}
-    token={session.token}
-    branches={adminBranches}
-    loadInventory={loadInventory}
-    inventory={inventory}
-    loadingInventory={loadingInventory}
-    inventoryError={inventoryError}
-    inventorySearch={inventorySearch}
-    setInventorySearch={setInventorySearch}
-  />
-) : activePage === "branches" && isAdmin ? (
-  <AdminBranches
-    apiUrl={API_URL}
-    token={session.token}
-    onBranchesChanged={setAdminBranches}
-  />
-) : activePage === "users" && isAdmin ? (
-  <AdminUsers
-    apiUrl={API_URL}
-    token={session.token}
-    branches={adminBranches}
-  />
-) : activePage === "unbilled" && !isAdmin ? (
-  <UnbilledSale
-    apiUrl={API_URL}
-    token={session.token}
-    searchMedicines={fetchBillingMedicines}
-  />
-) : activePage === "past-bills" && !isAdmin ? (
-  <PastBills apiUrl={API_URL} token={session.token} />
-) : activePage === "purchase" && !isAdmin ? (
-  <PurchaseStock apiUrl={API_URL} token={session.token} />
-) : activePage === "customer-return" && !isAdmin ? (
-  <CustomerReturn apiUrl={API_URL} token={session.token} />
-) : activePage === "supplier-return" && !isAdmin ? (
-  <SupplierReturn
-    apiUrl={API_URL}
-    token={session.token}
-    searchBatches={fetchSupplierReturnBatches}
-  />
-) : activePage === "edit-bill" && !isAdmin ? (
-  <EditBill
-    apiUrl={API_URL}
-    token={session.token}
-    searchMedicines={fetchBillingMedicines}
-  />
-) : activePage === "alerts" && !isAdmin ? (
-  <ShopAlerts apiUrl={API_URL} token={session.token} />
-) : activePage === "analytics" && !isAdmin ? (
-  <ShopAnalytics apiUrl={API_URL} token={session.token} />
-) : activePage === "billing" && !isAdmin ? (
-  <div className="billing-page">
+  const billingView = (
+    <div className="billing-page">
     <div className="page-heading">
       <div>
         <p className="eyebrow">SALES MANAGEMENT</p>
@@ -924,192 +821,243 @@ function printInvoice() {
     )}
 
     {savedBill ? (
-      <div className="billing-card invoice-preview">
-  <div className="invoice-top">
-    <div className="invoice-brand">
-      <div className="brand-icon">K</div>
-      <div>
-        <h1>KIARA MEDICALS</h1>
-        <p>Medical Store Tax Invoice</p>
+      <div className="billing-card invoice-preview-container">
+        {/* Actions Bar (hidden during printing) */}
+        <div className="invoice-action-bar no-print">
+          <div className="invoice-status-pill">
+            <span className="status-dot-success" />
+            <span>Invoice Generated Successfully</span>
+          </div>
+          <div className="invoice-action-buttons">
+            <button
+              type="button"
+              className="primary-button print-action-btn"
+              onClick={printInvoice}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="6 9 6 2 18 2 18 9" />
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                <rect x="6" y="14" width="12" height="8" />
+              </svg>
+              Print Tax Invoice
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setSavedBill(null)}
+            >
+              + Create Next Bill
+            </button>
+          </div>
+        </div>
+
+        {/* Printable Tax Invoice Paper Document */}
+        <div className="tax-invoice-sheet">
+          {/* Main Pharmacy Header */}
+          <header className="gst-photo-header">
+            <h1 className="gst-photo-title">
+              {savedBill.legalName || savedBill.branchName || "KIARA MEDICAL AND PROVISION STORE"}
+            </h1>
+            <p className="gst-photo-sub">290/207, RAJPUT COLONY,</p>
+            <p className="gst-photo-sub">NEAR INCOME TAX COLONY,</p>
+            <p className="gst-photo-sub">Phone : 9528120548, 7014271864</p>
+            <p className="gst-photo-sub">E-Mail : sanjaygupta85@gmail.com</p>
+            <p className="gst-photo-sub">GSTIN : {savedBill.gstin || "08ABCFK5291Q1ZM"}</p>
+            <p className="gst-photo-sub">D.L.No : DRUG/2024-25/117477-117478</p>
+          </header>
+
+          <div className="gst-photo-banner">GST INVOICE</div>
+
+          {/* Patient Details & Invoice Meta */}
+          <div className="gst-photo-meta-section">
+            <div className="gst-meta-top-row">
+              <div className="gst-meta-patient-block">
+                <div className="gst-meta-line">
+                  <span className="gst-field-label">Patient Name :</span>
+                  <strong className="gst-field-value">
+                    {savedBill.patient?.name ? savedBill.patient.name.toUpperCase() : "MR SITARAM JI"}
+                  </strong>
+                </div>
+                <div className="gst-meta-line">
+                  <span className="gst-field-label">Patient Address :</span>
+                  <span className="gst-field-value">{savedBill.patient?.address || ""}</span>
+                </div>
+                <div className="gst-meta-line">
+                  <span className="gst-field-label">Dr Name :</span>
+                  <span className="gst-field-value">
+                    {savedBill.patient?.doctorName
+                      ? (savedBill.patient.doctorName.toUpperCase().startsWith("DR")
+                          ? savedBill.patient.doctorName.toUpperCase()
+                          : `DR ${savedBill.patient.doctorName.toUpperCase()}`)
+                      : "DR ANIL TAMBI JI,"}
+                  </span>
+                </div>
+                <div className="gst-meta-line">
+                  <span className="gst-field-label">Dr Reg No. :</span>
+                  <span className="gst-field-value">{savedBill.patient?.doctorRegNo || ""}</span>
+                </div>
+              </div>
+            </div>
+            <div className="gst-meta-bar">
+              <div className="gst-meta-bar-item">
+                <span className="gst-field-label">Invoice No. :</span>
+                <strong className="gst-field-value">
+                  {savedBill.invoiceNumber || savedBill.invoice_number || `K00${savedBill.saleId || "8619"}`}
+                </strong>
+              </div>
+              <div className="gst-meta-bar-item">
+                <span className="gst-field-label">Date:</span>
+                <span className="gst-field-value">{formatDateDDMMYYYY(savedBill.createdAt)}</span>
+              </div>
+              {savedBill.paymentMethod && (
+                <div className="gst-meta-bar-item">
+                  <span className="gst-field-label">Mode:</span>
+                  <span className="gst-field-value">{savedBill.paymentMethod}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Medicines Grid */}
+          <div className="gst-invoice-table-wrapper">
+            <table className="gst-photo-table">
+              <thead>
+                <tr>
+                  <th style={{ width: "28px" }}>SN.</th>
+                  <th>PRODUCT NAME</th>
+                  <th>PACK</th>
+                  <th>DISC</th>
+                  <th>HSN</th>
+                  <th>BATCH</th>
+                  <th>EXP</th>
+                  <th>QTY</th>
+                  <th>MRP</th>
+                  <th>SGST</th>
+                  <th>CGST</th>
+                  <th>AMOUNT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {savedBill.items.map((item, index) => {
+                  const packSize = Number(item.packSize || item.units_per_stock_unit || 1);
+                  const rate = Number(item.selling_price || 0) / packSize;
+                  const quantity = Number(item.quantity || 0);
+                  const discount = Number(item.discountAmount || 0);
+                  const amount = Math.max(0, rate * quantity - discount);
+                  const mrp = Number(item.mrp || (rate * packSize)) / packSize;
+                  const packDisplay = item.packaging || `1*${packSize}`;
+                  const discDisplay = discount > 0
+                    ? (item.discountPercent ? `${item.discountPercent}%` : `₹${discount.toFixed(0)}`)
+                    : "0%";
+                  const gstRate = Number(item.gstRate || 5);
+                  const halfGst = (gstRate / 2).toFixed(2);
+
+                  return (
+                    <tr key={`${item.batch_id}-${index}`}>
+                      <td className="center-cell">{index + 1}</td>
+                      <td className="product-name-cell">
+                        <strong>{item.product_name || item.product_name_snapshot}</strong>
+                      </td>
+                      <td className="center-cell">{packDisplay}</td>
+                      <td className="center-cell">{discDisplay}</td>
+                      <td className="center-cell">{item.default_hsn_code || item.hsn_code || "3004"}</td>
+                      <td className="center-cell">{item.batch_number || item.batch_number_snapshot || "—"}</td>
+                      <td className="center-cell">{formatExpiryMMYY(item.expiry_date || item.expiry_date_snapshot)}</td>
+                      <td className="center-cell">
+                        {quantity}{item.smallest_unit_label && item.smallest_unit_label !== "units" ? item.smallest_unit_label.toUpperCase() : ""}
+                      </td>
+                      <td className="right-cell">{mrp.toFixed(2)}</td>
+                      <td className="right-cell">{halfGst}</td>
+                      <td className="right-cell">{halfGst}</td>
+                      <td className="right-cell amount-cell">{amount.toFixed(2)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Calculations & GST Breakup */}
+          {(() => {
+            const finalPayable = Number(
+              savedBill.grandTotal ??
+              savedBill.grand_total ??
+              savedBill.total ??
+              finalTotal
+            );
+            const rawSubtotal = Number(
+              savedBill.subtotal ?? savedBill.sub_total ?? cartSubtotal
+            );
+            const itemDisc = Number(
+              savedBill.itemDiscount ?? savedBill.item_discount ?? cartItemDiscount
+            );
+            const billDisc = Number(
+              savedBill.billDiscount ?? savedBill.bill_discount ?? billDiscount
+            );
+            const totalDisc = itemDisc + billDisc;
+            const taxableVal = Math.max(0, finalPayable / 1.05);
+            const sgstVal = taxableVal * 0.025;
+            const cgstVal = taxableVal * 0.025;
+            const wordsRaw = numberToWordsIndian(finalPayable);
+            const wordsClean = wordsRaw.replace(/Rupees Only/i, "").trim();
+
+            return (
+              <>
+                {/* GST Formula Banner */}
+                <div className="gst-formula-banner">
+                  GST {taxableVal.toFixed(2)}*2.5%+2.5%={sgstVal.toFixed(2)}SGST+{cgstVal.toFixed(2)}CGST, ** GET WELL SOON **
+                </div>
+
+                {/* Terms and Totals Split */}
+                <div className="gst-bottom-split">
+                  <div className="gst-bottom-terms">
+                    <p className="gst-terms-title">Terms &amp; Conditions</p>
+                    <p>Consult your Doctor before use.</p>
+                    <p>All disputes subject to Jaipur Jurisdiction only.</p>
+                    <p>Prescribed Sales Tax declaration will be given.</p>
+                    <p className="gst-remark-line">Remark:</p>
+
+                    <div className="gst-signatory-wrap">
+                      <p className="gst-for-store">For KIARA MEDICAL AND PROVISION STORE</p>
+                      <div className="gst-sig-spacer" />
+                      <p className="gst-authorised">Authorised Signatory</p>
+                    </div>
+                  </div>
+
+                  <div className="gst-bottom-totals">
+                    <table className="gst-totals-table">
+                      <tbody>
+                        <tr>
+                          <td className="gst-tot-label">SUB TOTAL</td>
+                          <td className="gst-tot-val">{rawSubtotal.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                          <td className="gst-tot-label">DISCOUNT</td>
+                          <td className="gst-tot-val">{totalDisc.toFixed(2)}</td>
+                        </tr>
+                        <tr className="gst-grand-row">
+                          <td className="gst-tot-label"><strong>GRAND TOTAL</strong></td>
+                          <td className="gst-tot-val"><strong>{finalPayable.toFixed(2)}</strong></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Amount in words */}
+                <div className="gst-words-line">
+                  Rs. {wordsClean} only
+                </div>
+
+                {/* Footer Tagline */}
+                <div className="gst-footer-tagline">
+                  Get well soon. Scan the Healthcare QR Code for complete health services, insurance, and government benefits.
+                </div>
+              </>
+            );
+          })()}
+        </div>
       </div>
-    </div>
-
-    <button
-      type="button"
-      className="primary-button no-print"
-      onClick={printInvoice}
-    >
-      Print Invoice
-    </button>
-  </div>
-
-  <div className="invoice-shop-details">
-    <p>
-      <strong>Branch:</strong>{" "}
-      {savedBill.branchName ||
-        savedBill.branch_name ||
-        user.branchName ||
-        (isAdmin ? `Branch ID: ${billingBranchId}` : "Assigned Branch")}
-    </p>
-
-    <p>
-      <strong>Address:</strong>{" "}
-      {savedBill.branchAddress ||
-        savedBill.branch_address ||
-        "Branch address not configured"}
-    </p>
-
-    <p>
-      <strong>GSTIN:</strong>{" "}
-      {savedBill.gstin ||
-        savedBill.branchGstin ||
-        savedBill.branch_gstin ||
-        "Branch GSTIN not configured"}
-    </p>
-  </div>
-
-  <div className="invoice-title">
-    <h2>TAX INVOICE</h2>
-    <span>Original for recipient</span>
-  </div>
-
-  <div className="invoice-meta-grid">
-    <div>
-      <span>Invoice Number</span>
-      <strong>
-        {savedBill.invoiceNumber ||
-          savedBill.invoice_number ||
-          savedBill.billNumber ||
-          savedBill.bill_number ||
-          savedBill.saleId ||
-          savedBill.sale_id ||
-          "Not returned by server"}
-      </strong>
-    </div>
-
-    <div>
-      <span>Invoice Date</span>
-      <strong>
-        {savedBill.createdAt ||
-          savedBill.created_at ||
-          new Date().toLocaleString("en-IN")}
-      </strong>
-    </div>
-
-    <div>
-      <span>Payment Method</span>
-      <strong>{savedBill.paymentMethod || "CASH"}</strong>
-    </div>
-  </div>
-
-  <div className="invoice-patient">
-    <h3>Patient Details</h3>
-
-    <div className="invoice-patient-grid">
-      <p><span>Name</span><strong>{savedBill.patient?.name || "—"}</strong></p>
-      <p><span>Mobile</span><strong>{savedBill.patient?.mobile || "—"}</strong></p>
-      <p><span>Age / Gender</span><strong>{savedBill.patient?.age || "—"} / {savedBill.patient?.gender || "—"}</strong></p>
-      <p><span>Doctor</span><strong>{savedBill.patient?.doctorName || "—"}</strong></p>
-    </div>
-  </div>
-
-  <div className="table-scroll invoice-table-wrap">
-    <table className="products-table invoice-table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Medicine</th>
-          <th>Batch</th>
-          <th>Expiry</th>
-          <th>Qty</th>
-          <th>Rate</th>
-          <th>Discount</th>
-          <th>Amount</th>
-        </tr>
-      </thead>
-
-      <tbody>
-        {savedBill.items.map((item, index) => {
-          const packSize = Number(item.packSize || 1);
-          const rate = Number(item.selling_price || 0) / packSize;
-          const quantity = Number(item.quantity || 0);
-          const discount = Number(item.discountAmount || 0);
-          const amount = Math.max(0, rate * quantity - discount);
-
-          return (
-            <tr key={`${item.batch_id}-${index}`}>
-              <td>{index + 1}</td>
-              <td>
-                <strong>{item.product_name}</strong>
-                <small>
-                  {item.strength || ""} {item.dosage_form || ""}
-                </small>
-              </td>
-              <td>{item.batch_number || "—"}</td>
-              <td>
-                {item.expiry_date
-                  ? String(item.expiry_date).slice(0, 10)
-                  : "—"}
-              </td>
-              <td>{quantity} {item.smallest_unit_label || "units"}</td>
-              <td>₹{rate.toFixed(2)}</td>
-              <td>₹{discount.toFixed(2)}</td>
-              <td>₹{amount.toFixed(2)}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  </div>
-
-  <div className="invoice-summary">
-    <div>
-      <span>Subtotal (GST-inclusive)</span>
-      <strong>₹{Number(
-        savedBill.subtotal ?? savedBill.sub_total ?? cartSubtotal
-      ).toFixed(2)}</strong>
-    </div>
-
-    <div>
-      <span>Item Discounts</span>
-      <strong>− ₹{Number(
-        savedBill.itemDiscount ?? savedBill.item_discount ?? cartItemDiscount
-      ).toFixed(2)}</strong>
-    </div>
-
-    <div>
-      <span>Bill Discount</span>
-      <strong>− ₹{Number(
-        savedBill.billDiscount ?? savedBill.bill_discount ?? billDiscount
-      ).toFixed(2)}</strong>
-    </div>
-
-    <div className="invoice-grand-total">
-      <span>NET AMOUNT PAYABLE</span>
-      <strong>
-        ₹{Number(
-          savedBill.grandTotal ??
-          savedBill.grand_total ??
-          savedBill.total ??
-          finalTotal
-        ).toFixed(2)}
-      </strong>
-    </div>
-  </div>
-
-  <div className="invoice-footer">
-    <p>Thank you for visiting Kiara Medicals.</p>
-    <p>Please retain this invoice for your records.</p>
-  </div>
-
-  <button
-    type="button"
-    className="secondary-button no-print"
-    onClick={() => setSavedBill(null)}
-  >
-    Create Next Bill
-  </button>
-</div>
     ) : (
       <>
         <div className="billing-card">
@@ -1199,6 +1147,28 @@ function printInvoice() {
                   setPatient({ ...patient, doctorName: event.target.value })
                 }
                 placeholder="Doctor name (optional)"
+              />
+            </label>
+
+            <label>
+              Patient address
+              <input
+                value={patient.address}
+                onChange={(event) =>
+                  setPatient({ ...patient, address: event.target.value })
+                }
+                placeholder="Patient address (optional)"
+              />
+            </label>
+
+            <label>
+              Dr Reg No.
+              <input
+                value={patient.doctorRegNo}
+                onChange={(event) =>
+                  setPatient({ ...patient, doctorRegNo: event.target.value })
+                }
+                placeholder="Dr Reg No. (optional)"
               />
             </label>
           </div>
@@ -1408,8 +1378,10 @@ function printInvoice() {
         </div>
       </>
     )}
-  </div>
-) : (
+    </div>
+  );
+
+  const inventoryView = (
     <>
       <div className="page-heading">
         <div>
@@ -1551,8 +1523,359 @@ function printInvoice() {
         )}
       </div>
     </>
-  )}
-</section>
+  );
+
+  return (
+    <main className="dashboard-page">
+      <header className="topbar">
+        <div className="topbar-start">
+          <button
+            type="button"
+            className="menu-toggle"
+            aria-expanded={mobileNavOpen}
+            aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+            onClick={() => setMobileNavOpen((open) => !open)}
+          >
+            <span className="menu-toggle-bar" />
+            <span className="menu-toggle-bar" />
+            <span className="menu-toggle-bar" />
+          </button>
+          <div className="brand">
+            <div className="brand-icon">K</div>
+            <div className="brand-text">
+              <h1>{ENV.APP_NAME}</h1>
+              <p>Medical Store Management System</p>
+            </div>
+          </div>
+        </div>
+
+        <button className="logout-button" onClick={handleLogout}>
+          Logout
+        </button>
+      </header>
+
+      {mobileNavOpen && (
+        <button
+          type="button"
+          className="sidebar-overlay"
+          aria-label="Close menu"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+
+      <div className="app-layout">
+        <aside
+          className={`app-sidebar ${mobileNavOpen ? "is-open" : ""}`}
+          onClick={(event) => {
+            if (event.target.closest(".nav-item")) {
+              setMobileNavOpen(false);
+            }
+          }}
+        >
+          <p className="sidebar-label">MAIN MENU</p>
+
+          <NavLink to="/dashboard" className={navClass}>
+            <span>▦</span> Dashboard
+          </NavLink>
+
+          {!isAdmin && (
+            <>
+              <NavLink
+                to="/billing"
+                className={navClass}
+                onClick={() => {
+                  setBillingError("");
+                  setSavedBill(null);
+                }}
+              >
+                <span>▣</span> Billing
+              </NavLink>
+              <NavLink to="/past-bills" className={navClass}>
+                <span>▤</span> Past bills
+              </NavLink>
+              <NavLink
+                to="/inventory"
+                className={navClass}
+                onClick={() => {
+                  setInventoryError("");
+                }}
+              >
+                <span>▤</span> Inventory
+              </NavLink>
+              <NavLink to="/customer-return" className={navClass}>
+                <span>↩</span> Cust. return
+              </NavLink>
+
+              {/* Management-specific operations */}
+              {canManageShop && (
+                <>
+                  <NavLink to="/purchase" className={navClass}>
+                    <span>⊕</span> Purchase Stock
+                  </NavLink>
+                  <NavLink to="/supplier-return" className={navClass}>
+                    <span>↪</span> Supp. return
+                  </NavLink>
+                  <NavLink to="/edit-bill" className={navClass}>
+                    <span>✎</span> Edit bill
+                  </NavLink>
+                  <NavLink to="/unbilled" className={navClass}>
+                    <span>◌</span> Unbilled sales
+                  </NavLink>
+                  <NavLink to="/alerts" className={navClass}>
+                    <span>!</span> Stock Alerts
+                  </NavLink>
+                  <NavLink to="/analytics" className={navClass}>
+                    <span>▦</span> Branch Analytics
+                  </NavLink>
+                </>
+              )}
+            </>
+          )}
+
+          {isAdmin && (
+            <>
+              <NavLink to="/admin/medicine-master" className={navClass}>
+                <span>◫</span> Medicine Master
+              </NavLink>
+              <NavLink to="/admin/inventory" className={navClass}>
+                <span>▤</span> Inventory
+              </NavLink>
+              <NavLink to="/admin/branches" className={navClass}>
+                <span>⌂</span> Branches
+              </NavLink>
+              <NavLink to="/admin/users" className={navClass}>
+                <span>◎</span> Users
+              </NavLink>
+            </>
+          )}
+
+          <div className="sidebar-user">
+            <div className="sidebar-avatar">
+              {(user.fullName || user.username || "U")
+                .charAt(0)
+                .toUpperCase()}
+            </div>
+            <div>
+              <strong>{user.fullName}</strong>
+              <small>{roleDisplayTitle}</small>
+            </div>
+          </div>
+        </aside>
+
+        <section className="app-content">
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+
+            <Route
+              path="/dashboard"
+              element={
+                isAdmin ? (
+                  <AdminDashboard
+                    apiUrl={API_URL}
+                    token={session.token}
+                    onSelectBranchSales={(branch) => {
+                      setSelectedBranch(branch);
+                      navigate(`/admin/branch-sales/${branch.id}`);
+                    }}
+                  />
+                ) : (
+                  <ShopDashboard
+                    apiUrl={API_URL}
+                    token={session.token}
+                    branchName={user.branchName}
+                    userName={user.fullName}
+                  />
+                )
+              }
+            />
+
+            {/* Admin routes */}
+            <Route
+              path="/admin/branch-sales/:branchId"
+              element={
+                isAdmin ? (
+                  <AdminBranchSalesRoute
+                    apiUrl={API_URL}
+                    token={session.token}
+                    branches={adminBranches}
+                    selectedBranch={selectedBranch}
+                    onBack={() => navigate("/dashboard")}
+                  />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              }
+            />
+            <Route
+              path="/admin/medicine-master"
+              element={
+                isAdmin ? (
+                  <AdminMedicineMaster apiUrl={API_URL} token={session.token} />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              }
+            />
+            <Route
+              path="/admin/inventory"
+              element={
+                isAdmin ? (
+                  <AdminInventoryReadOnly
+                    apiUrl={API_URL}
+                    token={session.token}
+                    branches={adminBranches}
+                    loadInventory={loadInventory}
+                    inventory={inventory}
+                    loadingInventory={loadingInventory}
+                    inventoryError={inventoryError}
+                    inventorySearch={inventorySearch}
+                    setInventorySearch={setInventorySearch}
+                  />
+                ) : (
+                  <Navigate to="/inventory" replace />
+                )
+              }
+            />
+            <Route
+              path="/admin/branches"
+              element={
+                isAdmin ? (
+                  <AdminBranches
+                    apiUrl={API_URL}
+                    token={session.token}
+                    onBranchesChanged={setAdminBranches}
+                  />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              }
+            />
+            <Route
+              path="/admin/users"
+              element={
+                isAdmin ? (
+                  <AdminUsers
+                    apiUrl={API_URL}
+                    token={session.token}
+                    branches={adminBranches}
+                  />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              }
+            />
+
+            {/* Shop user & manager routes */}
+            <Route
+              path="/billing"
+              element={!isAdmin ? billingView : <Navigate to="/dashboard" replace />}
+            />
+            <Route
+              path="/past-bills"
+              element={
+                !isAdmin ? (
+                  <PastBills apiUrl={API_URL} token={session.token} />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              }
+            />
+            <Route
+              path="/inventory"
+              element={
+                !isAdmin ? inventoryView : <Navigate to="/admin/inventory" replace />
+              }
+            />
+            <Route
+              path="/customer-return"
+              element={
+                !isAdmin ? (
+                  <CustomerReturn apiUrl={API_URL} token={session.token} />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              }
+            />
+
+            {/* Shop Manager / Shop User routes */}
+            <Route
+              path="/purchase"
+              element={
+                canManageShop ? (
+                  <PurchaseStock apiUrl={API_URL} token={session.token} />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              }
+            />
+            <Route
+              path="/supplier-return"
+              element={
+                canManageShop ? (
+                  <SupplierReturn
+                    apiUrl={API_URL}
+                    token={session.token}
+                    searchBatches={fetchSupplierReturnBatches}
+                  />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              }
+            />
+            <Route
+              path="/edit-bill"
+              element={
+                canManageShop ? (
+                  <EditBill
+                    apiUrl={API_URL}
+                    token={session.token}
+                    searchMedicines={fetchBillingMedicines}
+                  />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              }
+            />
+            <Route
+              path="/unbilled"
+              element={
+                canManageShop ? (
+                  <UnbilledSale
+                    apiUrl={API_URL}
+                    token={session.token}
+                    searchMedicines={fetchBillingMedicines}
+                  />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              }
+            />
+            <Route
+              path="/alerts"
+              element={
+                canManageShop ? (
+                  <ShopAlerts apiUrl={API_URL} token={session.token} />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                canManageShop ? (
+                  <ShopAnalytics apiUrl={API_URL} token={session.token} />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              }
+            />
+
+            {/* Unknown path fallback */}
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </section>
       </div>
     </main>
   );
