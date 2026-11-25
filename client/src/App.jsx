@@ -548,7 +548,7 @@ const finalTotal = Math.max(
     setPatient({
       name: entry.name || "",
       age: entry.age || "",
-      mobile: entry.mobile || "",
+      mobile: String(entry.mobile || "").replace(/\D/g, "").slice(0, 10),
       gender: entry.gender || "",
       doctorName: entry.doctorName || "",
       address: entry.address || "",
@@ -582,6 +582,12 @@ const finalTotal = Math.max(
 
   if (!patient.name.trim()) {
     setBillingError("Patient ka naam enter karo.");
+    return;
+  }
+
+  const cleanMobile = patient.mobile.trim();
+  if (cleanMobile && !/^\d{10}$/.test(cleanMobile)) {
+    setBillingError("Enter a valid 10-digit mobile number.");
     return;
   }
 
@@ -1121,14 +1127,19 @@ function printInvoice() {
             </label>
 
             <label className="patient-field-with-suggest">
-              Mobile
+              Mobile (10 digits)
               <input
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                pattern="\d{10}"
                 value={patient.mobile}
                 autoComplete="off"
-                onChange={(event) =>
-                  setPatient({ ...patient, mobile: event.target.value })
-                }
-                placeholder="Mobile number"
+                onChange={(event) => {
+                  const digitsOnly = event.target.value.replace(/\D/g, "").slice(0, 10);
+                  setPatient({ ...patient, mobile: digitsOnly });
+                }}
+                placeholder="10-digit mobile (optional)"
               />
             </label>
 

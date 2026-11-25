@@ -14,6 +14,19 @@ const router = express.Router();
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function toSqlDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString().slice(0, 10);
+  }
+  const str = String(value).trim();
+  if (!str) return null;
+  const m = str.match(/^\d{4}-\d{2}-\d{2}/);
+  if (m) return m[0];
+  const parsed = new Date(str);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
+
 // GET /api/billing/medicines?search=...
 // Search medicines and their available batches for billing.
 router.get("/medicines", authenticateToken, async (req, res) => {
@@ -446,12 +459,59 @@ router.get("/:saleId", authenticateToken, requireShopUser, async (req, res) => {
       return res.status(404).json({ success: false, message: "Bill not found." });
     }
 
+    const saleRow = sales[0];
+    let patientName = null;
+    let patientMobile = null;
+    if (saleRow.patient_id) {
+      const [pRows] = await pool.execute(
+        `SELECT full_name, mobile FROM patients WHERE patient_id = ? AND branch_id = ? LIMIT 1`,
+        [saleRow.patient_id, branchId]
+      );
+      if (pRows.length) {
+        patientName = pRows[0].full_name;
+        patientMobile = pRows[0].mobile;
+      }
+    }
+    const parsedNotes = parsePatientNotes(saleRow.notes);
+    patientName = patientName || parsedNotes?.name || "Walk-in Patient";
+    patientMobile = patientMobile || parsedNotes?.mobile || "";
+
     const [items] = await pool.execute(
       `SELECT * FROM sale_items WHERE sale_id = ? AND branch_id = ?`,
       [saleId, branchId]
     );
 
-    res.json({ success: true, sale: sales[0], items });
+    const [returnRows] = await pool.execute(
+      `SELECT cri.sale_item_id, SUM(cri.quantity) AS returned_qty
+       FROM customer_return_items cri
+       INNER JOIN sale_items si ON si.sale_item_id = cri.sale_item_id
+       WHERE si.sale_id = ? AND si.branch_id = ?
+       GROUP BY cri.sale_item_id`,
+      [saleId, branchId]
+    );
+    const returnedByItem = new Map(
+      returnRows.map((r) => [Number(r.sale_item_id), Number(r.returned_qty) || 0])
+    );
+
+    const enrichedItems = items.map((item) => {
+      const alreadyReturned = returnedByItem.get(Number(item.sale_item_id)) || 0;
+      const returnable = Math.max(0, Number(item.quantity) - alreadyReturned);
+      return {
+        ...item,
+        already_returned_qty: alreadyReturned,
+        returnable_quantity: returnable,
+      };
+    });
+
+    res.json({
+      success: true,
+      sale: {
+        ...saleRow,
+        patientName,
+        patientMobile,
+      },
+      items: enrichedItems,
+    });
   } catch (error) {
     console.error("Get bill error:", error.message);
     res.status(500).json({ success: false, message: "Unable to load bill." });
@@ -577,7 +637,7 @@ router.post("/unbilled", authenticateToken, requireShopUser, async (req, res) =>
           stock.batch_id,
           stock.product_name,
           stock.batch_number,
-          stock.expiry_date,
+          toSqlDate(stock.expiry_date),
           quantity,
           stock.mrp,
           Number(unitPrice.toFixed(2)),
@@ -794,7 +854,7 @@ router.put("/:saleId", authenticateToken, requireShopUser, async (req, res) => {
           stock.batch_id,
           stock.product_name,
           stock.batch_number,
-          stock.expiry_date,
+          toSqlDate(stock.expiry_date),
           quantity,
           stock.mrp,
           Number(unitPrice.toFixed(2)),
@@ -851,7 +911,7 @@ router.put("/:saleId", authenticateToken, requireShopUser, async (req, res) => {
           stock.batch_id,
           stock.product_name,
           stock.batch_number,
-          stock.expiry_date,
+          toSqlDate(stock.expiry_date),
           quantity,
           stock.mrp,
           Number(unitPrice.toFixed(2)),
@@ -1011,6 +1071,24 @@ router.post("/", authenticateToken, requireShopUser, async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Invalid payment method.",
+      });
+    }
+
+    const normalizedPatientName =
+      typeof patientName === "string" ? patientName.trim() : "";
+    if (normalizedPatientName.length > 120) {
+      return res.status(400).json({
+        success: false,
+        message: "Patient name must be 120 characters or fewer.",
+      });
+    }
+
+    const rawMobile = typeof patientMobile === "string" ? patientMobile.trim() : "";
+    const normalizedPatientMobile = rawMobile.replace(/[\s()-]/g, "");
+    if (normalizedPatientMobile && !/^\d{10}$/.test(normalizedPatientMobile)) {
+      return res.status(400).json({
+        success: false,
+        message: "Enter a valid 10-digit patient mobile number.",
       });
     }
 
@@ -1193,10 +1271,8 @@ router.post("/", authenticateToken, requireShopUser, async (req, res) => {
     let effectivePatientId =
       patientId != null && patientId !== "" ? Number(patientId) : null;
 
-    const trimmedPatientName =
-      typeof patientName === "string" ? patientName.trim() : "";
-    const trimmedPatientMobile =
-      typeof patientMobile === "string" ? patientMobile.trim() : "";
+    const trimmedPatientName = normalizedPatientName;
+    const trimmedPatientMobile = normalizedPatientMobile;
 
     if (!effectivePatientId && trimmedPatientName) {
       if (trimmedPatientMobile) {
@@ -1209,12 +1285,10 @@ router.post("/", authenticateToken, requireShopUser, async (req, res) => {
         if (byMobile.length) {
           effectivePatientId = byMobile[0].patient_id;
         }
-      }
-
-      if (!effectivePatientId) {
+      } else {
         const [byName] = await connection.execute(
           `SELECT patient_id FROM patients
-           WHERE branch_id = ? AND full_name = ?
+           WHERE branch_id = ? AND full_name = ? AND (mobile IS NULL OR mobile = '')
            LIMIT 1`,
           [branchId, trimmedPatientName]
         );
@@ -1351,7 +1425,7 @@ const branch = branchRows[0];
           stock.batch_id,
           stock.product_name,
           stock.batch_number,
-          stock.expiry_date,
+          toSqlDate(stock.expiry_date),
           requestedUnits,
           stock.mrp,
           Number(line.unitPrice.toFixed(2)),
@@ -1384,6 +1458,17 @@ const branch = branchRows[0];
           stock.batch_id,
         ]
       );
+
+      await recordStockMovement(connection, {
+        branchId,
+        batchId: stock.batch_id,
+        quantityDelta: -requestedUnits,
+        transactionType: "SALE",
+        sourceType: "BILLED_SALE",
+        sourceKey: invoiceNumber,
+        notes: saleNotes || `Billed sale ${invoiceNumber}`,
+        userId: req.user.userId,
+      });
     }
 
     await connection.commit();
@@ -1412,20 +1497,30 @@ const branch = branchRows[0];
 },
     });
   } catch (error) {
-    await connection.rollback();
+    try {
+      await connection.rollback();
+    } catch (_) {}
 
     console.error("Create bill error:", error);
 
+    const isSqlInputError = [
+      "ER_DATA_TOO_LONG",
+      "ER_TRUNCATED_WRONG_VALUE",
+      "ER_TRUNCATED_WRONG_VALUE_FOR_FIELD",
+      "ER_BAD_NULL_ERROR",
+    ].includes(error.code);
+
     const clientError =
-      /insufficient stock|unavailable|expired|discount|patient not found|doctor not found/i.test(
-        error.message
+      isSqlInputError ||
+      /insufficient stock|unavailable|expired|discount|patient not found|doctor not found|valid 10-digit/i.test(
+        error.message || ""
       );
 
     return res.status(clientError ? 400 : 500).json({
       success: false,
       message: clientError
-        ? error.message
-        : "Unable to create bill. No stock changes were saved.",
+        ? error.sqlMessage || error.message
+        : `Unable to create bill. No stock changes were saved.${error.code ? ` (${error.code})` : ""}`,
     });
   } finally {
     connection.release();

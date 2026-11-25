@@ -161,8 +161,21 @@ router.post("/customer", authenticateToken, requireShopUser, async (req, res) =>
       if (!saleItems.length) throw new Error(`Sale line ${saleItemId} not found.`);
 
       const line = saleItems[0];
-      if (quantity > Number(line.quantity)) {
-        throw new Error("Return quantity exceeds sold quantity.");
+      const [prevReturns] = await connection.execute(
+        `SELECT COALESCE(SUM(quantity), 0) AS returned_qty
+         FROM customer_return_items
+         WHERE sale_item_id = ? AND branch_id = ?`,
+        [saleItemId, branchId]
+      );
+      const alreadyReturned = Number(prevReturns[0]?.returned_qty || 0);
+      const remainingReturnable = Math.max(0, Number(line.quantity) - alreadyReturned);
+
+      if (quantity > remainingReturnable) {
+        throw new Error(
+          alreadyReturned > 0
+            ? `Return quantity exceeds remaining returnable quantity (${remainingReturnable} left; ${alreadyReturned} already returned).`
+            : "Return quantity exceeds sold quantity."
+        );
       }
 
       const refundAmount = Number(

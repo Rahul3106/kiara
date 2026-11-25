@@ -35,20 +35,76 @@ router.post("/suppliers", authenticateToken, requireShopUser, async (req, res) =
   try {
     const branchId = resolveBranchId(req.user);
     const { supplierName, phone = "", gstin = "", address = "" } = req.body || {};
+
     if (typeof supplierName !== "string" || !supplierName.trim()) {
       return res.status(400).json({
         success: false,
         message: "Supplier name is required.",
       });
     }
+
+    const cleanName = supplierName.trim();
+    if (cleanName.length > 200) {
+      return res.status(400).json({
+        success: false,
+        message: "Supplier name must be 200 characters or fewer.",
+      });
+    }
+
+    const cleanPhone = String(phone).replace(/[\s()-]/g, "").trim();
+    if (!/^\d{10,12}$/.test(cleanPhone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Supplier phone number is required (10-12 digits) so suppliers can be distinguished.",
+      });
+    }
+
+    const cleanGstin = String(gstin).trim().toUpperCase();
+    if (cleanGstin && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(cleanGstin)) {
+      return res.status(400).json({
+        success: false,
+        message: "Enter a valid 15-character GSTIN or leave it blank.",
+      });
+    }
+
+    const cleanAddress = String(address).trim().slice(0, 500);
+
+    const [dupRows] = await pool.execute(
+      `SELECT supplier_id, supplier_name, phone
+       FROM suppliers
+       WHERE branch_id = ?
+         AND is_active = TRUE
+         AND (
+           LOWER(TRIM(supplier_name)) = LOWER(?)
+           OR phone = ?
+           OR (? <> '' AND UPPER(TRIM(COALESCE(gstin, ''))) = ?)
+         )
+       LIMIT 1`,
+      [branchId, cleanName, cleanPhone, cleanGstin, cleanGstin]
+    );
+
+    if (dupRows.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `Supplier already exists (${dupRows[0].supplier_name}${dupRows[0].phone ? ` · ${dupRows[0].phone}` : ""}). Select them from the dropdown instead.`,
+      });
+    }
+
     const [result] = await pool.execute(
       `INSERT INTO suppliers (branch_id, supplier_name, phone, gstin, address)
        VALUES (?, ?, ?, ?, ?)`,
-      [branchId, supplierName.trim(), String(phone).trim(), String(gstin).trim(), String(address).trim()]
+      [branchId, cleanName, cleanPhone, cleanGstin || null, cleanAddress || null]
     );
     res.status(201).json({
       success: true,
       supplierId: result.insertId,
+      supplier: {
+        supplier_id: result.insertId,
+        supplier_name: cleanName,
+        phone: cleanPhone,
+        gstin: cleanGstin || null,
+        address: cleanAddress || null,
+      },
     });
   } catch (error) {
     console.error("Create supplier error:", error.message);

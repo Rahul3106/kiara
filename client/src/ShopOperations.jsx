@@ -455,9 +455,16 @@ export function PurchaseStock({ apiUrl, token }) {
     paymentMethod: "CASH",
   });
   const [lineDraft, setLineDraft] = useState(emptyPurchaseLine());
-  const [productFilter, setProductFilter] = useState("");
+  const [productQuery, setProductQuery] = useState("");
+  const [productMenuOpen, setProductMenuOpen] = useState(false);
   const [cart, setCart] = useState([]);
-  const [newSupplier, setNewSupplier] = useState("");
+  const [newSupplier, setNewSupplier] = useState({
+    supplierName: "",
+    phone: "",
+    gstin: "",
+    address: "",
+  });
+  const [savingSupplier, setSavingSupplier] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -482,30 +489,78 @@ export function PurchaseStock({ apiUrl, token }) {
 
   async function addSupplier(event) {
     event.preventDefault();
+    if (savingSupplier) return;
     setError("");
+    setMessage("");
+
+    const cleanName = newSupplier.supplierName.trim();
+    const cleanPhone = newSupplier.phone.replace(/\D/g, "");
+    const cleanGstin = newSupplier.gstin.trim().toUpperCase();
+
+    if (!cleanName) {
+      setError("Supplier name is required.");
+      return;
+    }
+    if (!/^\d{10,12}$/.test(cleanPhone)) {
+      setError("Supplier phone number must be 10-12 digits so suppliers can be distinguished.");
+      return;
+    }
+    if (cleanGstin && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(cleanGstin)) {
+      setError("Enter a valid 15-character GSTIN or leave GSTIN blank.");
+      return;
+    }
+
+    setSavingSupplier(true);
     try {
       const res = await fetch(`${apiUrl}/api/purchases/suppliers`, {
         method: "POST",
         headers: headers(token),
-        body: JSON.stringify({ supplierName: newSupplier }),
+        body: JSON.stringify({
+          supplierName: cleanName,
+          phone: cleanPhone,
+          gstin: cleanGstin,
+          address: newSupplier.address.trim(),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
-      setNewSupplier("");
+      setNewSupplier({ supplierName: "", phone: "", gstin: "", address: "" });
       await load();
+      if (data.supplierId) {
+        setHeader((prev) => ({ ...prev, supplierId: String(data.supplierId) }));
+      }
+      setMessage(`Supplier "${cleanName}" (${cleanPhone}) saved and selected.`);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSavingSupplier(false);
     }
   }
 
-  const filteredProducts = products.filter((p) => {
-    const q = productFilter.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      String(p.product_name || "").toLowerCase().includes(q) ||
-      String(p.brand || "").toLowerCase().includes(q)
+  const filteredProducts = products
+    .filter((p) => {
+      const q = productQuery.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        String(p.product_name || "").toLowerCase().includes(q) ||
+        String(p.brand || "").toLowerCase().includes(q) ||
+        String(p.salt_name || "").toLowerCase().includes(q) ||
+        String(p.strength || "").toLowerCase().includes(q)
+      );
+    })
+    .slice(0, 25);
+
+  const selectedProduct = products.find(
+    (p) => Number(p.product_id) === Number(lineDraft.productId)
+  );
+
+  function selectPurchaseProduct(product) {
+    setLineDraft((prev) => ({ ...prev, productId: String(product.product_id) }));
+    setProductQuery(
+      `${product.product_name}${product.brand ? ` (${product.brand})` : ""}`
     );
-  });
+    setProductMenuOpen(false);
+  }
 
   const cartLineTotal = (line) =>
     Number(line.purchasePrice || 0) * Number(line.quantityPacks || 0);
@@ -519,7 +574,7 @@ export function PurchaseStock({ apiUrl, token }) {
     event.preventDefault();
     setError("");
     if (!lineDraft.productId) {
-      setError("Select a medicine for this line.");
+      setError("Search and select a medicine from the dropdown list.");
       return;
     }
     if (!lineDraft.batchNumber.trim()) {
@@ -541,7 +596,8 @@ export function PurchaseStock({ apiUrl, token }) {
       },
     ]);
     setLineDraft(emptyPurchaseLine());
-    setProductFilter("");
+    setProductQuery("");
+    setProductMenuOpen(false);
   }
 
   async function savePurchase(event) {
@@ -602,17 +658,74 @@ export function PurchaseStock({ apiUrl, token }) {
       {message && <div className="notice-card">{message}</div>}
 
       <div className="billing-card">
-        <h3>Add supplier</h3>
-        <form className="billing-search" onSubmit={addSupplier}>
-          <input
-            value={newSupplier}
-            onChange={(e) => setNewSupplier(e.target.value)}
-            placeholder="Supplier name"
-            required
-          />
-          <button type="submit" className="secondary-button">
-            Save supplier
-          </button>
+        <h3>Add new supplier</h3>
+        <p className="billing-search-hint">
+          Include phone number (and GSTIN/city if available) to distinguish suppliers with similar names.
+        </p>
+        <form onSubmit={addSupplier}>
+          <div className="billing-grid">
+            <label>
+              Supplier name *
+              <input
+                value={newSupplier.supplierName}
+                onChange={(e) =>
+                  setNewSupplier({ ...newSupplier, supplierName: e.target.value })
+                }
+                placeholder="e.g. MedPlus Distributors"
+                required
+              />
+            </label>
+            <label>
+              Phone / Mobile * (10-12 digits)
+              <input
+                type="tel"
+                inputMode="numeric"
+                maxLength={12}
+                value={newSupplier.phone}
+                onChange={(e) =>
+                  setNewSupplier({
+                    ...newSupplier,
+                    phone: e.target.value.replace(/\D/g, "").slice(0, 12),
+                  })
+                }
+                placeholder="10-digit mobile or STD phone"
+                required
+              />
+            </label>
+            <label>
+              GSTIN (optional)
+              <input
+                maxLength={15}
+                value={newSupplier.gstin}
+                onChange={(e) =>
+                  setNewSupplier({
+                    ...newSupplier,
+                    gstin: e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 15),
+                  })
+                }
+                placeholder="15-character GSTIN"
+              />
+            </label>
+            <label>
+              Address / City (optional)
+              <input
+                value={newSupplier.address}
+                onChange={(e) =>
+                  setNewSupplier({ ...newSupplier, address: e.target.value })
+                }
+                placeholder="Area or city"
+              />
+            </label>
+          </div>
+          <div className="form-actions-row">
+            <button
+              type="submit"
+              className="secondary-button"
+              disabled={savingSupplier}
+            >
+              {savingSupplier ? "Saving supplier…" : "Save supplier"}
+            </button>
+          </div>
         </form>
       </div>
 
@@ -628,10 +741,12 @@ export function PurchaseStock({ apiUrl, token }) {
                 setHeader({ ...header, supplierId: e.target.value })
               }
             >
-              <option value="">Select</option>
+              <option value="">Select supplier</option>
               {suppliers.map((s) => (
                 <option key={s.supplier_id} value={s.supplier_id}>
                   {s.supplier_name}
+                  {s.phone ? ` · ${s.phone}` : ""}
+                  {s.gstin ? ` · GSTIN ${s.gstin}` : ""}
                 </option>
               ))}
             </select>
@@ -644,6 +759,7 @@ export function PurchaseStock({ apiUrl, token }) {
               onChange={(e) =>
                 setHeader({ ...header, supplierInvoiceNumber: e.target.value })
               }
+              placeholder="Supplier bill / invoice no."
             />
           </label>
           <label>
@@ -667,31 +783,74 @@ export function PurchaseStock({ apiUrl, token }) {
           Add each medicine/batch on this supplier invoice, then save once.
         </p>
         <form className="billing-grid" onSubmit={addLineToCart}>
-          <label>
-            Search medicine
-            <input
-              value={productFilter}
-              onChange={(e) => setProductFilter(e.target.value)}
-              placeholder="Filter by name or brand…"
-            />
-          </label>
-          <label>
-            Product *
-            <select
-              required
-              value={lineDraft.productId}
-              onChange={(e) =>
-                setLineDraft({ ...lineDraft, productId: e.target.value })
-              }
-            >
-              <option value="">Select medicine</option>
-              {filteredProducts.map((p) => (
-                <option key={p.product_id} value={p.product_id}>
-                  {p.product_name}
-                  {p.brand ? ` (${p.brand})` : ""}
-                </option>
-              ))}
-            </select>
+          <label className="patient-field-with-suggest purchase-product-field">
+            Medicine / Product *
+            <div className="purchase-combobox-wrap">
+              <input
+                type="search"
+                autoComplete="off"
+                value={productQuery}
+                onFocus={() => setProductMenuOpen(true)}
+                onBlur={() => window.setTimeout(() => setProductMenuOpen(false), 180)}
+                onChange={(e) => {
+                  setProductQuery(e.target.value);
+                  setLineDraft((prev) => ({ ...prev, productId: "" }));
+                  setProductMenuOpen(true);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setProductMenuOpen(false);
+                }}
+                placeholder="Search & select medicine by name, brand, or salt…"
+                required={!lineDraft.productId}
+              />
+              {lineDraft.productId && (
+                <button
+                  type="button"
+                  className="combobox-clear-btn"
+                  aria-label="Clear selected medicine"
+                  onClick={() => {
+                    setLineDraft((prev) => ({ ...prev, productId: "" }));
+                    setProductQuery("");
+                    setProductMenuOpen(true);
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            {selectedProduct && (
+              <small className="purchase-selected-hint">
+                Selected: {selectedProduct.product_name}
+                {selectedProduct.packaging ? ` · ${selectedProduct.packaging}` : ""}
+              </small>
+            )}
+            {productMenuOpen && (
+              <ul className="patient-suggest-list" role="listbox">
+                {filteredProducts.length === 0 ? (
+                  <li className="patient-suggest-empty">No medicines match “{productQuery}”.</li>
+                ) : (
+                  filteredProducts.map((p) => (
+                    <li key={p.product_id}>
+                      <button
+                        type="button"
+                        className="patient-suggest-item"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => selectPurchaseProduct(p)}
+                      >
+                        <strong>
+                          {p.product_name}
+                          {p.brand ? ` (${p.brand})` : ""}
+                        </strong>
+                        <span>
+                          {[p.salt_name, p.strength, p.packaging].filter(Boolean).join(" · ") ||
+                            "Medicine"}
+                        </span>
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            )}
           </label>
           <label>
             Batch number *
@@ -1626,6 +1785,7 @@ export function CustomerReturn({ apiUrl, token }) {
   const [selectedId, setSelectedId] = useState("");
   const [bill, setBill] = useState(null);
   const [quantities, setQuantities] = useState({});
+  const [returnNotes, setReturnNotes] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [processing, setProcessing] = useState(false);
@@ -1648,6 +1808,8 @@ export function CustomerReturn({ apiUrl, token }) {
   async function loadBill(saleId) {
     setSelectedId(saleId);
     setBill(null);
+    setError("");
+    if (!saleId) return;
     const res = await fetch(`${apiUrl}/api/billing/${saleId}`, {
       headers: headers(token),
     });
@@ -1659,8 +1821,17 @@ export function CustomerReturn({ apiUrl, token }) {
         q[item.sale_item_id] = 0;
       }
       setQuantities(q);
+    } else {
+      setError(data.message || "Could not load selected bill.");
     }
   }
+
+  const estimatedRefund = (bill?.items || []).reduce((sum, item) => {
+    const qty = Math.max(0, Number(quantities[item.sale_item_id] || 0));
+    const soldQty = Math.max(1, Number(item.quantity || 1));
+    const unitNet = Number(item.line_total || 0) / soldQty;
+    return sum + unitNet * qty;
+  }, 0);
 
   async function submitReturn(event) {
     event.preventDefault();
@@ -1689,6 +1860,7 @@ export function CustomerReturn({ apiUrl, token }) {
         body: JSON.stringify({
           saleId: Number(selectedId),
           clientTransactionId: crypto.randomUUID(),
+          notes: returnNotes.trim(),
           items,
         }),
       });
@@ -1696,9 +1868,7 @@ export function CustomerReturn({ apiUrl, token }) {
       if (!res.ok) throw new Error(data.message);
 
       const creditNote = data.creditNoteNumber || data.credit_note_number;
-      const total = Number(data.returnTotal ?? data.return_total ?? 0).toFixed(
-        2
-      );
+      const total = Number(data.returnTotal ?? data.return_total ?? 0).toFixed(2);
       setSuccessPopup({
         title: "Return processed",
         detail: creditNote
@@ -1706,11 +1876,9 @@ export function CustomerReturn({ apiUrl, token }) {
           : `Return of ₹${total} was recorded. Stock has been restocked.`,
       });
 
-      const resetQty = {};
-      for (const item of bill.items || []) {
-        resetQty[item.sale_item_id] = 0;
-      }
-      setQuantities(resetQty);
+      setReturnNotes("");
+      await loadBill(selectedId);
+      await loadRecentBills(searchTerm);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1729,7 +1897,7 @@ export function CustomerReturn({ apiUrl, token }) {
         <div>
           <p className="eyebrow">RETURNS</p>
           <h2>Customer return</h2>
-          <p>Select bill → return qty → restock (SRS 4.6 / FR-28).</p>
+          <p>Select bill → enter return quantity → restock & issue credit note (SRS 4.6).</p>
         </div>
       </div>
       {error && <div className="error-message">{error}</div>}
@@ -1762,11 +1930,11 @@ export function CustomerReturn({ apiUrl, token }) {
         </div>
       )}
 
-      <div className="billing-card" style={{ marginBottom: "16px" }}>
-        <h3 style={{ margin: "0 0 12px 0" }}>Select Bill by Patient Name or Invoice #</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", alignItems: "end" }}>
-          <label style={{ margin: 0 }}>
-            Search by Patient Name / Invoice
+      <div className="billing-card">
+        <h3>Find bill to return</h3>
+        <div className="billing-grid">
+          <label>
+            Search by patient name, mobile, or invoice #
             <input
               type="search"
               placeholder="Type patient name, mobile, or KM-..."
@@ -1774,8 +1942,8 @@ export function CustomerReturn({ apiUrl, token }) {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </label>
-          <label style={{ margin: 0 }}>
-            Matched Bills ({bills.length})
+          <label>
+            Matched bills ({bills.length})
             <select
               value={selectedId}
               onChange={(e) => loadBill(e.target.value)}
@@ -1790,46 +1958,120 @@ export function CustomerReturn({ apiUrl, token }) {
           </label>
         </div>
       </div>
+
+      {bill?.sale && (
+        <div className="notice-card bill-summary-banner">
+          <div>
+            <strong>{bill.sale.invoice_number || `Bill #${bill.sale.sale_id}`}</strong>
+            <p>
+              Patient: <strong>{bill.sale.patientName || "Walk-in Patient"}</strong>
+              {bill.sale.patientMobile ? ` · ${bill.sale.patientMobile}` : ""} ·{" "}
+              {String(bill.sale.sale_datetime).slice(0, 16)} · Payment:{" "}
+              {bill.sale.payment_method}
+            </p>
+          </div>
+          <div className="bill-summary-total">
+            <span>Bill Total</span>
+            <strong>₹{Number(bill.sale.grand_total).toFixed(2)}</strong>
+          </div>
+        </div>
+      )}
+
       {bill?.items && (
         <form className="billing-card" onSubmit={submitReturn}>
-          <table className="products-table">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Sold</th>
-                <th>Return qty</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bill.items.map((item) => (
-                <tr key={item.sale_item_id}>
-                  <td>{item.product_name_snapshot}</td>
-                  <td>{item.quantity}</td>
-                  <td>
-                    <input
-                      type="number"
-                      min="0"
-                      max={item.quantity}
-                      value={quantities[item.sale_item_id] ?? 0}
-                      onChange={(e) =>
-                        setQuantities({
-                          ...quantities,
-                          [item.sale_item_id]: e.target.value,
-                        })
-                      }
-                    />
-                  </td>
+          <h3>Select quantities to return</h3>
+          <div className="table-scroll">
+            <table className="products-table">
+              <thead>
+                <tr>
+                  <th>Medicine / batch</th>
+                  <th>Rate / unit</th>
+                  <th>Sold / returned</th>
+                  <th>Return qty</th>
+                  <th>Refund ₹</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <button
-            type="submit"
-            className="primary-button"
-            disabled={processing}
-          >
-            {processing ? "Processing…" : "Process return"}
-          </button>
+              </thead>
+              <tbody>
+                {bill.items.map((item) => {
+                  const soldQty = Number(item.quantity || 0);
+                  const alreadyReturned = Number(item.already_returned_qty || 0);
+                  const maxReturnable =
+                    item.returnable_quantity != null
+                      ? Number(item.returnable_quantity)
+                      : Math.max(0, soldQty - alreadyReturned);
+                  const qty = Math.max(0, Number(quantities[item.sale_item_id] || 0));
+                  const unitRefund = soldQty > 0 ? Number(item.line_total || 0) / soldQty : 0;
+                  const lineRefund = unitRefund * qty;
+
+                  return (
+                    <tr key={item.sale_item_id}>
+                      <td>
+                        <strong>{item.product_name_snapshot}</strong>
+                        <small>
+                          Batch {item.batch_number_snapshot}
+                          {item.expiry_date_snapshot
+                            ? ` · Exp ${String(item.expiry_date_snapshot).slice(0, 10)}`
+                            : ""}
+                        </small>
+                      </td>
+                      <td>₹{unitRefund.toFixed(2)}</td>
+                      <td>
+                        <span>{soldQty} sold</span>
+                        {alreadyReturned > 0 && (
+                          <small>{alreadyReturned} returned · {maxReturnable} left</small>
+                        )}
+                      </td>
+                      <td>
+                        <input
+                          className="billing-number"
+                          type="number"
+                          min="0"
+                          max={maxReturnable}
+                          disabled={maxReturnable === 0}
+                          value={quantities[item.sale_item_id] ?? 0}
+                          onChange={(e) => {
+                            const val = Math.max(
+                              0,
+                              Math.min(Number(e.target.value) || 0, maxReturnable)
+                            );
+                            setQuantities({
+                              ...quantities,
+                              [item.sale_item_id]: val,
+                            });
+                          }}
+                        />
+                      </td>
+                      <td>₹{lineRefund.toFixed(2)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="return-footer">
+            <label className="return-notes-field">
+              Return reason / notes (optional)
+              <input
+                value={returnNotes}
+                onChange={(e) => setReturnNotes(e.target.value)}
+                placeholder="e.g. Patient returned unused strip"
+              />
+            </label>
+            <div className="checkout-total supplier-return-total">
+              <span>Estimated refund</span>
+              <strong>₹{estimatedRefund.toFixed(2)}</strong>
+            </div>
+            <div className="form-actions-row">
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={processing || estimatedRefund <= 0}
+              >
+                {processing ? "Processing return…" : "Process return & restock"}
+              </button>
+            </div>
+          </div>
         </form>
       )}
     </>
@@ -2038,6 +2280,8 @@ export function SupplierReturn({ apiUrl, token, searchBatches }) {
               {suppliers.map((s) => (
                 <option key={s.supplier_id} value={s.supplier_id}>
                   {s.supplier_name}
+                  {s.phone ? ` · ${s.phone}` : ""}
+                  {s.gstin ? ` · GSTIN ${s.gstin}` : ""}
                 </option>
               ))}
             </select>
@@ -2211,9 +2455,11 @@ export function EditBill({ apiUrl, token, searchMedicines }) {
   const [selectedId, setSelectedId] = useState("");
   const [bill, setBill] = useState(null);
   const [editItems, setEditItems] = useState([]);
+  const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [search, setSearch] = useState("");
   const [searchBillTerm, setSearchBillTerm] = useState("");
   const [results, setResults] = useState([]);
+  const [searchingMeds, setSearchingMeds] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -2240,29 +2486,46 @@ export function EditBill({ apiUrl, token, searchMedicines }) {
     }
     setSelectedId(String(saleId));
     setError("");
+    setMessage("");
     const res = await fetch(`${apiUrl}/api/billing/${saleId}`, {
       headers: headers(token),
     });
     const data = await res.json();
     if (res.ok) {
       setBill(data.sale);
+      setPaymentMethod(data.sale?.payment_method || "CASH");
       setEditItems(
         (data.items || []).map((item) => ({
           saleItemId: item.sale_item_id,
           batchId: item.batch_id,
+          batchNumber: item.batch_number_snapshot,
           quantity: item.quantity,
-          discountAmount: item.discount_amount,
-          gstRate: item.gst_rate,
+          discountAmount: item.discount_amount ?? 0,
+          gstRate: item.gst_rate ?? 5,
+          unitPrice: Number(item.unit_selling_price || 0),
           label: item.product_name_snapshot,
-          lineTotal: item.line_total,
+          alreadyReturned: Number(item.already_returned_qty || 0),
         }))
       );
+      setResults([]);
+      setSearch("");
     } else {
       setError(data.message || "Could not load bill.");
     }
   }
 
+  const estimatedBillTotal = editItems.reduce((sum, item) => {
+    const qty = Math.max(0, Number(item.quantity || 0));
+    const unit = Number(item.unitPrice || 0);
+    const disc = Math.max(0, Number(item.discountAmount || 0));
+    return sum + Math.max(0, unit * qty - disc);
+  }, 0);
+
   async function saveEdit() {
+    if (!editItems.length) {
+      setError("Keep at least one medicine line on the bill.");
+      return;
+    }
     setError("");
     setMessage("");
     setSaving(true);
@@ -2271,7 +2534,7 @@ export function EditBill({ apiUrl, token, searchMedicines }) {
         method: "PUT",
         headers: headers(token),
         body: JSON.stringify({
-          paymentMethod: bill?.payment_method,
+          paymentMethod,
           items: editItems.map((item) => ({
             batchId: item.batchId,
             quantity: Number(item.quantity),
@@ -2283,7 +2546,7 @@ export function EditBill({ apiUrl, token, searchMedicines }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
       await loadBill(selectedId);
-      await refreshBillList();
+      await refreshBillList(searchBillTerm);
       setMessage(
         `Bill updated. New total ₹${Number(data.grandTotal ?? bill?.grand_total ?? 0).toFixed(2)}. Past bills and returns will show the corrected quantities.`
       );
@@ -2296,8 +2559,47 @@ export function EditBill({ apiUrl, token, searchMedicines }) {
 
   async function addFromSearch(event) {
     event.preventDefault();
-    const meds = await searchMedicines(search);
-    setResults(meds || []);
+    if (search.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    setSearchingMeds(true);
+    try {
+      const meds = await searchMedicines(search.trim());
+      setResults(meds || []);
+    } finally {
+      setSearchingMeds(false);
+    }
+  }
+
+  function addSearchBatchToEdit(row) {
+    const packSize = Number(row.units_per_stock_unit || 1);
+    const unitPrice = Number(row.selling_price || 0) / packSize;
+    setEditItems((prev) => {
+      const idx = prev.findIndex((i) => Number(i.batchId) === Number(row.batch_id));
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = {
+          ...next[idx],
+          quantity: Number(next[idx].quantity || 0) + 1,
+        };
+        return next;
+      }
+      return [
+        ...prev,
+        {
+          saleItemId: null,
+          batchId: row.batch_id,
+          batchNumber: row.batch_number,
+          quantity: 1,
+          discountAmount: 0,
+          gstRate: Number(row.default_gst_rate ?? 5),
+          unitPrice,
+          label: row.product_name,
+          alreadyReturned: 0,
+        },
+      ];
+    });
   }
 
   return (
@@ -2306,16 +2608,17 @@ export function EditBill({ apiUrl, token, searchMedicines }) {
         <div>
           <p className="eyebrow">BILLING</p>
           <h2>Edit bill</h2>
-          <p>Adjust lines; stock is restored then re-deducted (FR-14 style correction).</p>
+          <p>Adjust quantities, discounts, payment method, or add/remove lines; stock adjusts automatically.</p>
         </div>
       </div>
       {error && <div className="error-message">{error}</div>}
       {message && <div className="notice-card">{message}</div>}
-      <div className="billing-card" style={{ marginBottom: "16px" }}>
-        <h3 style={{ margin: "0 0 12px 0" }}>Select Bill by Patient Name or Invoice #</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", alignItems: "end" }}>
-          <label style={{ margin: 0 }}>
-            Search by Patient Name / Invoice
+
+      <div className="billing-card">
+        <h3>Find bill to edit</h3>
+        <div className="billing-grid">
+          <label>
+            Search by patient name, mobile, or invoice #
             <input
               type="search"
               placeholder="Type patient name, mobile, or KM-..."
@@ -2323,8 +2626,8 @@ export function EditBill({ apiUrl, token, searchMedicines }) {
               onChange={(e) => setSearchBillTerm(e.target.value)}
             />
           </label>
-          <label style={{ margin: 0 }}>
-            Matched Bills ({bills.length})
+          <label>
+            Matched bills ({bills.length})
             <select value={selectedId} onChange={(e) => loadBill(e.target.value)}>
               <option value="">Select bill to edit</option>
               {bills.map((b) => (
@@ -2338,132 +2641,191 @@ export function EditBill({ apiUrl, token, searchMedicines }) {
       </div>
 
       {bill && (
-        <div className="notice-card">
-          <strong>{bill.invoice_number}</strong>
-          <p>
-            Saved bill total: ₹{Number(bill.grand_total).toFixed(2)} ·{" "}
-            {String(bill.sale_datetime).slice(0, 16)}
-          </p>
+        <div className="notice-card bill-summary-banner">
+          <div>
+            <strong>{bill.invoice_number || `Bill #${bill.sale_id}`}</strong>
+            <p>
+              Patient: <strong>{bill.patientName || "Walk-in Patient"}</strong>
+              {bill.patientMobile ? ` · ${bill.patientMobile}` : ""} ·{" "}
+              {String(bill.sale_datetime).slice(0, 16)}
+            </p>
+          </div>
+          <div className="bill-summary-total">
+            <span>Saved Bill Total</span>
+            <strong>₹{Number(bill.grand_total).toFixed(2)}</strong>
+          </div>
         </div>
       )}
 
-      {editItems.length > 0 && (
+      {bill && (
         <div className="billing-card">
-          <h3>Bill lines (updates save to this invoice)</h3>
+          <div className="edit-bill-header-row">
+            <h3>Bill lines ({editItems.length})</h3>
+            <label className="edit-bill-payment-field">
+              Payment method
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+              >
+                <option value="CASH">CASH</option>
+                <option value="UPI">UPI</option>
+                <option value="CARD">CARD</option>
+                <option value="OTHER">OTHER</option>
+              </select>
+            </label>
+          </div>
+
           <div className="table-scroll">
             <table className="products-table">
               <thead>
                 <tr>
-                  <th>Medicine</th>
+                  <th>Medicine / batch</th>
+                  <th>Unit ₹</th>
                   <th>Qty (units)</th>
                   <th>Discount ₹</th>
-                  <th>Line total</th>
+                  <th>Est. total</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {editItems.map((item, index) => (
-                  <tr key={item.saleItemId || `${item.batchId}-${index}`}>
-                    <td>{item.label}</td>
-                    <td>
-                      <input
-                        className="billing-number"
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => {
-                          const next = [...editItems];
-                          next[index] = {
-                            ...next[index],
-                            quantity: e.target.value,
-                          };
-                          setEditItems(next);
-                        }}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="billing-number"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={item.discountAmount}
-                        onChange={(e) => {
-                          const next = [...editItems];
-                          next[index] = {
-                            ...next[index],
-                            discountAmount: e.target.value,
-                          };
-                          setEditItems(next);
-                        }}
-                      />
-                    </td>
-                    <td>
-                      {item.lineTotal != null
-                        ? `₹${Number(item.lineTotal).toFixed(2)}`
-                        : "—"}
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="remove-item-button"
-                        onClick={() =>
-                          setEditItems(editItems.filter((_, i) => i !== index))
-                        }
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {editItems.map((item, index) => {
+                  const qty = Math.max(0, Number(item.quantity || 0));
+                  const disc = Math.max(0, Number(item.discountAmount || 0));
+                  const estLine = Math.max(0, Number(item.unitPrice || 0) * qty - disc);
+                  return (
+                    <tr key={item.saleItemId || `${item.batchId}-${index}`}>
+                      <td>
+                        <strong>{item.label}</strong>
+                        <small>
+                          Batch {item.batchNumber || item.batchId}
+                          {item.alreadyReturned > 0
+                            ? ` · ${item.alreadyReturned} already returned (min qty)`
+                            : ""}
+                        </small>
+                      </td>
+                      <td>₹{Number(item.unitPrice || 0).toFixed(2)}</td>
+                      <td>
+                        <input
+                          className="billing-number"
+                          type="number"
+                          min={Math.max(1, item.alreadyReturned || 0)}
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const next = [...editItems];
+                            next[index] = {
+                              ...next[index],
+                              quantity: e.target.value,
+                            };
+                            setEditItems(next);
+                          }}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="billing-number"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.discountAmount}
+                          onChange={(e) => {
+                            const next = [...editItems];
+                            next[index] = {
+                              ...next[index],
+                              discountAmount: e.target.value,
+                            };
+                            setEditItems(next);
+                          }}
+                        />
+                      </td>
+                      <td>₹{estLine.toFixed(2)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="remove-item-button"
+                          disabled={item.alreadyReturned > 0}
+                          title={
+                            item.alreadyReturned > 0
+                              ? "Cannot remove line with customer returns"
+                              : "Remove line"
+                          }
+                          onClick={() =>
+                            setEditItems(editItems.filter((_, i) => i !== index))
+                          }
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-          <p className="billing-search-hint">
-            After save, reopen this bill under Past bills or Customer return to
-            see updated quantities.
-          </p>
-          <form className="billing-search" onSubmit={addFromSearch}>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Add medicine…"
-            />
-            <button type="submit" className="secondary-button">
-              Search
-            </button>
-          </form>
-          {results.slice(0, 5).map((r) => (
-            <button
-              key={r.batch_id}
-              type="button"
-              className="secondary-button"
-              onClick={() =>
-                setEditItems([
-                  ...editItems,
-                  {
-                    saleItemId: null,
-                    batchId: r.batch_id,
-                    quantity: 1,
-                    discountAmount: 0,
-                    gstRate: 5,
-                    label: r.product_name,
-                    lineTotal: null,
-                  },
-                ])
-              }
-            >
-              + {r.product_name}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="primary-button"
-            disabled={saving}
-            onClick={saveEdit}
-          >
-            {saving ? "Saving…" : "Save bill changes"}
-          </button>
+
+          <div className="edit-bill-add-section">
+            <h4>Add another medicine to this bill</h4>
+            <form className="billing-search" onSubmit={addFromSearch}>
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search medicine name, brand, or batch (min 2 letters)…"
+              />
+              <button type="submit" className="secondary-button" disabled={searchingMeds}>
+                {searchingMeds ? "Searching…" : "Search"}
+              </button>
+            </form>
+            {results.length > 0 && (
+              <div className="billing-results">
+                {results.slice(0, 6).map((r) => {
+                  const packSize = Number(r.units_per_stock_unit || 1);
+                  const unitRate = Number(r.selling_price || 0) / packSize;
+                  return (
+                    <div key={r.batch_id} className="medicine-search-row">
+                      <div className="medicine-search-row-text">
+                        <span className="medicine-search-row-name">
+                          {r.product_name}
+                          {r.brand ? ` (${r.brand})` : ""}
+                        </span>
+                        <span className="medicine-search-row-meta">
+                          Batch {r.batch_number} · Exp {String(r.expiry_date || "").slice(0, 10) || "N/A"} · ₹{unitRate.toFixed(2)}/{r.smallest_unit_label || "unit"} · Avail {r.available_smallest_units}
+                        </span>
+                      </div>
+                      <div className="medicine-search-row-actions">
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => addSearchBatchToEdit(r)}
+                        >
+                          + Add 1 {r.smallest_unit_label || "unit"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="edit-bill-footer">
+            <div className="checkout-total supplier-return-total">
+              <span>Estimated updated bill total</span>
+              <strong>₹{estimatedBillTotal.toFixed(2)}</strong>
+            </div>
+            <p className="billing-search-hint">
+              After save, reopen this bill under Past bills or Customer return to see updated quantities.
+            </p>
+            <div className="form-actions-row">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={saving || editItems.length === 0}
+                onClick={saveEdit}
+              >
+                {saving ? "Saving…" : "Save bill changes"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>

@@ -30,6 +30,7 @@ const rawPool = isMockMode
       waitForConnections: true,
       connectionLimit: env.db.connectionLimit,
       connectTimeout: env.db.connectTimeout,
+      dateStrings: ["DATE"],
       queueLimit: 0,
       ...(env.db.ssl ? { ssl: { rejectUnauthorized: false } } : {}),
     });
