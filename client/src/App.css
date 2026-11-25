@@ -3885,6 +3885,52 @@ button.branch-tile-button:hover:not(:disabled) {
   transition: width 0.3s ease;
 }
 
+/* Clickable Branch Row & Bill Lookup Dropdown Polish */
+.clickable-branch-row {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.clickable-branch-row:hover {
+  background-color: #f0fdf4;
+}
+
+.bill-lookup-list {
+  max-height: 260px;
+}
+
+.bill-lookup-item {
+  flex-direction: row !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 12px;
+}
+
+.bill-lookup-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bill-lookup-left small,
+.bill-lookup-right small {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.bill-lookup-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.bill-lookup-right strong {
+  color: #166534;
+}
+
 @media (max-width: 640px) {
   .bill-summary-total {
     align-items: flex-start;

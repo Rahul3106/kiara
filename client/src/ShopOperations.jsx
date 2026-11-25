@@ -27,13 +27,13 @@ async function readJsonResponse(response, fallbackMessage) {
   }
 }
 
-function formatSignedRupees(value) {
+export function formatSignedRupees(value) {
   const num = Number(value || 0);
   if (num < 0) return `− ₹${Math.abs(num).toFixed(2)}`;
   return `₹${num.toFixed(2)}`;
 }
 
-function MetricGrid({ title, data, highlight }) {
+export function MetricGrid({ title, data, highlight }) {
   if (!data) return null;
   const netSales = Number(data.netTotal || 0);
   const stockPurchases = Number(data.stockPurchases || 0);
@@ -79,7 +79,7 @@ function MetricGrid({ title, data, highlight }) {
   );
 }
 
-function ProfitSummaryCard({ analytics }) {
+export function ProfitSummaryCard({ analytics }) {
   const rows = [
     { key: "day", label: analytics?.day?.label || "Today" },
     { key: "week", label: analytics?.week?.label || "This week" },
@@ -149,7 +149,7 @@ const PAYMENT_COLORS = {
   OTHER: "#f59e0b",
 };
 
-function ExtraDashboardCharts({ charts }) {
+export function ExtraDashboardCharts({ charts }) {
   if (!charts) return null;
 
   const paymentData = (charts.paymentMix || []).map((p) => ({
@@ -2106,7 +2106,7 @@ function BillLookupField({
           )}
         </div>
         {menuOpen && (
-          <ul className="patient-suggest-list" role="listbox">
+          <ul className="patient-suggest-list bill-lookup-list" role="listbox">
             {bills.length === 0 ? (
               <li className="patient-suggest-empty">
                 No bills match “{searchTerm}”.
@@ -2120,23 +2120,24 @@ function BillLookupField({
                   <li key={b.sale_id}>
                     <button
                       type="button"
-                      className="patient-suggest-item"
+                      className="patient-suggest-item bill-lookup-item"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => {
                         onSelectBill(b);
                         setMenuOpen(false);
                       }}
                     >
-                      <strong>
-                        {name} · {inv}
-                      </strong>
-                      <span>
-                        {[
-                          mobile || "No mobile",
-                          String(b.sale_datetime).slice(0, 16),
-                          `₹${Number(b.grand_total).toFixed(2)}`,
-                        ].join(" · ")}
-                      </span>
+                      <div className="bill-lookup-left">
+                        <strong>{name}</strong>
+                        <small>
+                          {inv}
+                          {mobile ? ` · ${mobile}` : ""}
+                        </small>
+                      </div>
+                      <div className="bill-lookup-right">
+                        <strong>₹{Number(b.grand_total).toFixed(2)}</strong>
+                        <small>{String(b.sale_datetime).slice(0, 10)}</small>
+                      </div>
                     </button>
                   </li>
                 );
@@ -2262,7 +2263,7 @@ export function CustomerReturn({ apiUrl, token }) {
   }
 
   return (
-    <>
+    <div className="billing-page">
       <div className="page-heading">
         <div>
           <p className="eyebrow">RETURNS</p>
@@ -2339,7 +2340,40 @@ export function CustomerReturn({ apiUrl, token }) {
 
       {bill?.items && (
         <form className="billing-card" onSubmit={submitReturn}>
-          <h3>Select quantities to return</h3>
+          <div className="edit-bill-header-row">
+            <h3>Select quantities to return</h3>
+            <div className="form-actions-row" style={{ marginTop: 0 }}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  const maxAll = {};
+                  for (const item of bill.items) {
+                    const soldQty = Number(item.quantity || 0);
+                    const already = Number(item.already_returned_qty || 0);
+                    maxAll[item.sale_item_id] =
+                      item.returnable_quantity != null
+                        ? Number(item.returnable_quantity)
+                        : Math.max(0, soldQty - already);
+                  }
+                  setQuantities(maxAll);
+                }}
+              >
+                Fill max returnable
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  const zero = {};
+                  for (const item of bill.items) zero[item.sale_item_id] = 0;
+                  setQuantities(zero);
+                }}
+              >
+                Clear qty
+              </button>
+            </div>
+          </div>
           <div className="table-scroll">
             <table className="products-table">
               <thead>
@@ -2434,7 +2468,7 @@ export function CustomerReturn({ apiUrl, token }) {
           </div>
         </form>
       )}
-    </>
+    </div>
   );
 }
 
@@ -3026,7 +3060,7 @@ export function EditBill({ apiUrl, token, searchMedicines }) {
   }
 
   return (
-    <>
+    <div className="billing-page">
       <div className="page-heading">
         <div>
           <p className="eyebrow">BILLING</p>
@@ -3245,7 +3279,7 @@ export function EditBill({ apiUrl, token, searchMedicines }) {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 

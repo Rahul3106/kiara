@@ -184,14 +184,25 @@ async function getDashboardCharts(branchId, period = "month") {
 
 router.get("/branch", authenticateToken, async (req, res) => {
   try {
-    if (!["SHOP_USER", "SHOP_MANAGER"].includes(req.user.role)) {
+    let branchId;
+    if (["SHOP_USER", "SHOP_MANAGER"].includes(req.user.role)) {
+      branchId = Number(req.user.branchId);
+    } else if (req.user.role === "ADMIN") {
+      const requested = typeof req.query.branchId === "string" ? req.query.branchId.trim() : "";
+      if (!/^\d+$/.test(requested)) {
+        return res.status(400).json({
+          success: false,
+          message: "branchId query parameter is required for Admin.",
+        });
+      }
+      branchId = Number(requested);
+    } else {
       return res.status(403).json({
         success: false,
-        message: "Shop branch analytics only.",
+        message: "Not authorized for branch analytics.",
       });
     }
 
-    const branchId = Number(req.user.branchId);
     const periods = ["day", "week", "month"];
     const result = {};
 

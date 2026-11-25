@@ -5,6 +5,12 @@ import {
   DonutChart,
   HorizontalBarChart,
 } from "./components/AnalyticsCharts.jsx";
+import {
+  ExtraDashboardCharts,
+  MetricGrid,
+  ProfitSummaryCard,
+  formatSignedRupees,
+} from "./ShopOperations.jsx";
 
 function authHeaders(token) {
   return {
@@ -395,9 +401,46 @@ export function AdminDashboard({ apiUrl, token, onSelectBranchSales }) {
 
 export function AdminBranchSales({ apiUrl, token, branch, onBack }) {
   const [sales, setSales] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
+  const [charts, setCharts] = useState(null);
+  const [alertCounts, setAlertCounts] = useState({ low: 0, expiry: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    if (!branch?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [anRes, alRes] = await Promise.all([
+          fetch(`${apiUrl}/api/analytics/branch?branchId=${branch.id}`, {
+            headers: authHeaders(token),
+          }),
+          fetch(`${apiUrl}/api/alerts?branchId=${branch.id}`, {
+            headers: authHeaders(token),
+          }),
+        ]);
+        const anData = await anRes.json();
+        const alData = await alRes.json();
+        if (!cancelled && anRes.ok) {
+          setAnalytics(anData.analytics || null);
+          setCharts(anData.charts || null);
+        }
+        if (!cancelled && alRes.ok) {
+          setAlertCounts({
+            low: (alData.lowStock || []).length,
+            expiry: (alData.expiryAlerts || []).length,
+          });
+        }
+      } catch {
+        /* analytics optional */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl, token, branch?.id]);
 
   const loadSales = useCallback(async (searchTerm = "") => {
     if (!branch?.id) return;
@@ -423,18 +466,54 @@ export function AdminBranchSales({ apiUrl, token, branch, onBack }) {
     loadSales(search);
   }, [loadSales, search]);
 
+  const month = analytics?.month;
+  const monthProfit = Number(
+    month?.totalProfit ??
+      Number(month?.netTotal || 0) - Number(month?.stockPurchases || 0)
+  );
+  const periodBarCategories = ["Today", "This Week", "This Month"];
+  const periodBarSeries = [
+    {
+      name: "Net Sales",
+      color: "#2563eb",
+      data: [
+        Number(analytics?.day?.netTotal || 0),
+        Number(analytics?.week?.netTotal || 0),
+        Number(analytics?.month?.netTotal || 0),
+      ],
+    },
+    {
+      name: "Stock Purchases (−)",
+      color: "#f59e0b",
+      data: [
+        Number(analytics?.day?.stockPurchases || 0),
+        Number(analytics?.week?.stockPurchases || 0),
+        Number(analytics?.month?.stockPurchases || 0),
+      ],
+    },
+    {
+      name: "Total Profit",
+      color: "#10b981",
+      data: [
+        Number(analytics?.day?.totalProfit ?? (Number(analytics?.day?.netTotal || 0) - Number(analytics?.day?.stockPurchases || 0))),
+        Number(analytics?.week?.totalProfit ?? (Number(analytics?.week?.netTotal || 0) - Number(analytics?.week?.stockPurchases || 0))),
+        monthProfit,
+      ],
+    },
+  ];
+
   return (
     <div className="billing-page">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">BRANCH REPORT</p>
+          <p className="eyebrow">BRANCH DASHBOARD &amp; ANALYTICS</p>
           <h2>{branch?.name}</h2>
           <p>
             {branch?.code} · GSTIN {branch?.gstin || "—"}
           </p>
         </div>
         <button type="button" className="secondary-button" onClick={onBack}>
-          Back to Dashboard
+          ← Back
         </button>
       </div>
 
@@ -442,6 +521,66 @@ export function AdminBranchSales({ apiUrl, token, branch, onBack }) {
         <div className="error-message" role="alert">
           {error}
         </div>
+      )}
+
+      {analytics && (
+        <>
+          <div className="dashboard-kpi-grid">
+            <article className="stat-card stat-card-sales">
+              <span className="stat-card-label">Net sales (this month)</span>
+              <p className="stat-card-value">
+                ₹{Number(month?.netTotal || 0).toFixed(2)}
+              </p>
+              <span className="stat-card-hint">Billed + unbilled − returns</span>
+            </article>
+            <article className="stat-card stat-card-purchase">
+              <span className="stat-card-label">Stock purchases (this month)</span>
+              <p className="stat-card-value">
+                − ₹{Number(month?.stockPurchases || 0).toFixed(2)}
+              </p>
+              <span className="stat-card-hint">Supplier stock cost (deducted)</span>
+            </article>
+            <article className="stat-card stat-card-profit">
+              <span className="stat-card-label">Total profit (this month)</span>
+              <p
+                className={`stat-card-value ${
+                  monthProfit < 0 ? "metric-profit-negative" : "metric-profit-positive"
+                }`}
+              >
+                {formatSignedRupees(monthProfit)}
+              </p>
+              <span className="stat-card-hint">Net sales − stock purchases</span>
+            </article>
+            <article className="stat-card stat-card-alert">
+              <span className="stat-card-label">Alerts</span>
+              <p className="stat-card-value">{alertCounts.low + alertCounts.expiry}</p>
+              <span className="stat-card-hint">
+                {alertCounts.low} low stock · {alertCounts.expiry} expiry
+              </span>
+            </article>
+          </div>
+
+          <div className="charts-grid-2col">
+            <ProfitSummaryCard analytics={analytics} />
+            <BarChart
+              title="Sales, Purchases & Total Profit (Day / Week / Month)"
+              categories={periodBarCategories}
+              series={periodBarSeries}
+            />
+          </div>
+
+          <ExtraDashboardCharts charts={charts} />
+
+          <div className="dashboard-grid dashboard-grid-metrics" style={{ marginBottom: "22px" }}>
+            <MetricGrid title={analytics?.day?.label || "Today"} data={analytics?.day} />
+            <MetricGrid title={analytics?.week?.label || "This week"} data={analytics?.week} />
+            <MetricGrid
+              title={analytics?.month?.label || "This month"}
+              data={analytics?.month}
+              highlight
+            />
+          </div>
+        </>
       )}
 
       <div className="table-card">
@@ -760,7 +899,7 @@ export function AdminInventoryReadOnly({
   );
 }
 
-export function AdminBranches({ apiUrl, token, onBranchesChanged }) {
+export function AdminBranches({ apiUrl, token, onBranchesChanged, onSelectBranch }) {
   const [branches, setBranches] = useState([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -888,7 +1027,7 @@ export function AdminBranches({ apiUrl, token, onBranchesChanged }) {
         <div>
           <p className="eyebrow">ORGANIZATION</p>
           <h2>Branches</h2>
-          <p>Add branches or deactivate them to change store count.</p>
+          <p>Click any branch to view its dashboard &amp; analytics, or add/edit branches below.</p>
         </div>
       </div>
 
@@ -912,7 +1051,18 @@ export function AdminBranches({ apiUrl, token, onBranchesChanged }) {
           </thead>
           <tbody>
             {branches.map((b) => (
-              <tr key={b.branch_id}>
+              <tr
+                key={b.branch_id}
+                className={onSelectBranch ? "clickable-branch-row" : ""}
+                onClick={() =>
+                  onSelectBranch?.({
+                    id: b.branch_id,
+                    name: b.branch_name,
+                    code: b.branch_code,
+                    gstin: b.gstin,
+                  })
+                }
+              >
                 <td>{b.branch_code}</td>
                 <td>
                   <strong>{b.branch_name}</strong>
@@ -924,7 +1074,24 @@ export function AdminBranches({ apiUrl, token, onBranchesChanged }) {
                 </td>
                 <td>{b.gstin}</td>
                 <td>{b.is_active ? "Active" : "Inactive"}</td>
-                <td style={{ whiteSpace: "nowrap" }}>
+                <td style={{ whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                  {onSelectBranch && (
+                    <button
+                      type="button"
+                      className="primary-button"
+                      style={{ marginRight: "8px", minHeight: "36px", padding: "6px 12px" }}
+                      onClick={() =>
+                        onSelectBranch({
+                          id: b.branch_id,
+                          name: b.branch_name,
+                          code: b.branch_code,
+                          gstin: b.gstin,
+                        })
+                      }
+                    >
+                      Dashboard
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="secondary-button"

@@ -1912,7 +1912,7 @@ function printInvoice() {
                     token={session.token}
                     branches={adminBranches}
                     selectedBranch={selectedBranch}
-                    onBack={() => navigate("/dashboard")}
+                    onBack={() => navigate(-1)}
                   />
                 ) : (
                   <Navigate to="/dashboard" replace />
@@ -1957,6 +1957,10 @@ function printInvoice() {
                     apiUrl={API_URL}
                     token={session.token}
                     onBranchesChanged={setAdminBranches}
+                    onSelectBranch={(branch) => {
+                      setSelectedBranch(branch);
+                      navigate(`/admin/branch-sales/${branch.id}`);
+                    }}
                   />
                 ) : (
                   <Navigate to="/dashboard" replace />
