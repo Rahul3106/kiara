@@ -659,7 +659,7 @@ setSavedBill({
   // Patient and medicine details for the preview
   patient: { ...patient },
   items: [...cart],
-  createdAt: new Date().toLocaleString("en-IN"),
+  createdAt: new Date().toISOString(),
   paymentMethod,
 });
 
@@ -858,10 +858,10 @@ function printInvoice() {
             <h1 className="gst-photo-title">
               {savedBill.legalName || savedBill.branchName || "KIARA MEDICAL AND PROVISION STORE"}
             </h1>
-            <p className="gst-photo-sub">290/207, RAJPUT COLONY,</p>
-            <p className="gst-photo-sub">NEAR INCOME TAX COLONY,</p>
-            <p className="gst-photo-sub">Phone : 9528120548, 7014271864</p>
-            <p className="gst-photo-sub">E-Mail : sanjaygupta85@gmail.com</p>
+            <p className="gst-photo-sub">
+              {savedBill.branchAddress || savedBill.address || "290/207, RAJPUT COLONY, NEAR INCOME TAX COLONY"}
+            </p>
+            <p className="gst-photo-sub">Phone : {savedBill.phone || "9528120548, 7014271864"}</p>
             <p className="gst-photo-sub">GSTIN : {savedBill.gstin || "08ABCFK5291Q1ZM"}</p>
             <p className="gst-photo-sub">D.L.No : DRUG/2024-25/117477-117478</p>
           </header>
@@ -875,12 +875,12 @@ function printInvoice() {
                 <div className="gst-meta-line">
                   <span className="gst-field-label">Patient Name :</span>
                   <strong className="gst-field-value">
-                    {savedBill.patient?.name ? savedBill.patient.name.toUpperCase() : "MR SITARAM JI"}
+                    {savedBill.patient?.name ? savedBill.patient.name.toUpperCase() : "WALK-IN PATIENT"}
                   </strong>
                 </div>
                 <div className="gst-meta-line">
                   <span className="gst-field-label">Patient Address :</span>
-                  <span className="gst-field-value">{savedBill.patient?.address || ""}</span>
+                  <span className="gst-field-value">{savedBill.patient?.address || "—"}</span>
                 </div>
                 <div className="gst-meta-line">
                   <span className="gst-field-label">Dr Name :</span>
@@ -889,12 +889,12 @@ function printInvoice() {
                       ? (savedBill.patient.doctorName.toUpperCase().startsWith("DR")
                           ? savedBill.patient.doctorName.toUpperCase()
                           : `DR ${savedBill.patient.doctorName.toUpperCase()}`)
-                      : "DR ANIL TAMBI JI,"}
+                      : "—"}
                   </span>
                 </div>
                 <div className="gst-meta-line">
                   <span className="gst-field-label">Dr Reg No. :</span>
-                  <span className="gst-field-value">{savedBill.patient?.doctorRegNo || ""}</span>
+                  <span className="gst-field-value">{savedBill.patient?.doctorRegNo || "—"}</span>
                 </div>
               </div>
             </div>
@@ -902,7 +902,7 @@ function printInvoice() {
               <div className="gst-meta-bar-item">
                 <span className="gst-field-label">Invoice No. :</span>
                 <strong className="gst-field-value">
-                  {savedBill.invoiceNumber || savedBill.invoice_number || `K00${savedBill.saleId || "8619"}`}
+                  {savedBill.invoiceNumber || savedBill.invoice_number || (savedBill.saleId ? `KM-${savedBill.saleId}` : "—")}
                 </strong>
               </div>
               <div className="gst-meta-bar-item">
@@ -1018,7 +1018,9 @@ function printInvoice() {
                     <p className="gst-remark-line">Remark:</p>
 
                     <div className="gst-signatory-wrap">
-                      <p className="gst-for-store">For KIARA MEDICAL AND PROVISION STORE</p>
+                      <p className="gst-for-store">
+                        For {(savedBill.legalName || savedBill.branchName || "KIARA MEDICAL AND PROVISION STORE").toUpperCase()}
+                      </p>
                       <div className="gst-sig-spacer" />
                       <p className="gst-authorised">Authorised Signatory</p>
                     </div>
@@ -1076,6 +1078,12 @@ function printInvoice() {
                 onChange={(event) =>
                   setPatient({ ...patient, name: event.target.value })
                 }
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setPatientSuggestions([]);
+                }}
+                onBlur={() => {
+                  window.setTimeout(() => setPatientSuggestions([]), 180);
+                }}
                 placeholder="Patient name"
               />
               {patientSuggestions.length > 0 && (

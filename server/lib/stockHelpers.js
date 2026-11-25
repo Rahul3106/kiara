@@ -89,7 +89,7 @@ async function recordStockMovement(
 }
 
 function resolveBranchId(user, requestedBranchId) {
-  if (user.role === "SHOP_USER") return Number(user.branchId);
+  if (["SHOP_USER", "SHOP_MANAGER"].includes(user.role)) return Number(user.branchId);
   if (user.role === "ADMIN" && requestedBranchId) return Number(requestedBranchId);
   return null;
 }

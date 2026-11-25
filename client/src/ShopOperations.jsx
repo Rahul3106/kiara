@@ -1277,7 +1277,7 @@ export function PastBills({ apiUrl, token }) {
       </div>
       {error && <div className="error-message">{error}</div>}
 
-      <div className="billing-card">
+      <div className="billing-card no-print">
         <h3>Search bills</h3>
         <form className="billing-search" onSubmit={runSearch}>
           <input
@@ -1371,7 +1371,7 @@ export function PastBills({ apiUrl, token }) {
 
       {selectedId && (
         <div className="billing-card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+          <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
             <h3 style={{ margin: 0 }}>Bill detail</h3>
             <div style={{ display: "flex", gap: "8px" }}>
               <button
@@ -1393,16 +1393,16 @@ export function PastBills({ apiUrl, token }) {
             </div>
           </div>
 
-          {detailLoading && <p className="billing-search-hint">Loading…</p>}
+          {detailLoading && <p className="billing-search-hint no-print">Loading…</p>}
           {detail?.sale && (
             <>
-              <p>
+              <p className="no-print">
                 <strong>{detail.sale.invoice_number}</strong> ·{" "}
                 {String(detail.sale.sale_datetime).slice(0, 19)} ·{" "}
                 {detail.sale.payment_method}
               </p>
               {detail.sale.notes && (
-                <p className="past-bill-notes">{detail.sale.notes}</p>
+                <p className="past-bill-notes no-print">{detail.sale.notes}</p>
               )}
 
               {showInvoiceSheet ? (
@@ -1413,10 +1413,10 @@ export function PastBills({ apiUrl, token }) {
                   const addrMatch = notes.match(/Address:\s*([^|]+)/i);
                   const drRegMatch = notes.match(/Dr\s*Reg\s*No:\s*([^|]+)/i);
 
-                  const patientName = patMatch ? patMatch[1].trim() : "MR SITARAM JI";
-                  const doctorName = docMatch ? docMatch[1].trim() : "DR ANIL TAMBI JI";
-                  const patientAddress = addrMatch && addrMatch[1].trim() !== "N/A" ? addrMatch[1].trim() : "";
-                  const doctorRegNo = drRegMatch && drRegMatch[1].trim() !== "N/A" ? drRegMatch[1].trim() : "";
+                  const patientName = patMatch && patMatch[1].trim() !== "N/A" ? patMatch[1].trim() : "Walk-in Patient";
+                  const doctorName = docMatch && docMatch[1].trim() !== "N/A" ? docMatch[1].trim() : "";
+                  const patientAddress = addrMatch && addrMatch[1].trim() !== "N/A" ? addrMatch[1].trim() : "—";
+                  const doctorRegNo = drRegMatch && drRegMatch[1].trim() !== "N/A" ? drRegMatch[1].trim() : "—";
 
                   const grandTotal = Number(detail.sale.grand_total || 0);
                   const subTotal = Number(detail.sale.subtotal || grandTotal);
@@ -1465,9 +1465,11 @@ export function PastBills({ apiUrl, token }) {
                             <div className="gst-meta-line">
                               <span className="gst-field-label">Dr Name :</span>
                               <span className="gst-field-value">
-                                {doctorName.toUpperCase().startsWith("DR")
-                                  ? doctorName.toUpperCase()
-                                  : `DR ${doctorName.toUpperCase()}`}
+                                {doctorName
+                                  ? (doctorName.toUpperCase().startsWith("DR")
+                                      ? doctorName.toUpperCase()
+                                      : `DR ${doctorName.toUpperCase()}`)
+                                  : "—"}
                               </span>
                             </div>
                             <div className="gst-meta-line">

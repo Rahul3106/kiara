@@ -219,9 +219,9 @@ const sales = [
 ];
 
 const sale_items = [
-  { sale_item_id: 1, sale_id: 1, branch_id: 1, batch_id: 1, product_id: 1, product_name_snapshot: "Dolo 650", batch_number_snapshot: "KOR-B001", expiry_date_snapshot: "2027-10-31", quantity: 5, mrp_snapshot: 60, unit_price: 3.6, discount_amount: 10, gst_rate: 5, line_total: 170 },
-  { sale_item_id: 2, sale_id: 1, branch_id: 1, batch_id: 2, product_id: 2, product_name_snapshot: "Calpol 500", batch_number_snapshot: "KOR-B002", expiry_date_snapshot: "2027-09-30", quantity: 4, mrp_snapshot: 70, unit_price: 4.2, discount_amount: 10, gst_rate: 5, line_total: 160 },
-  { sale_item_id: 3, sale_id: 2, branch_id: 1, batch_id: 3, product_id: 3, product_name_snapshot: "Moxikind CV 625", batch_number_snapshot: "KOR-B003", expiry_date_snapshot: "2027-12-31", quantity: 5, mrp_snapshot: 80, unit_price: 7.2, discount_amount: 40, gst_rate: 5, line_total: 500 },
+  { sale_item_id: 1, sale_id: 1, branch_id: 1, batch_id: 1, product_id: 1, product_name_snapshot: "Dolo 650", batch_number_snapshot: "KOR-B001", expiry_date_snapshot: "2027-10-31", quantity: 5, mrp: 60, unit_selling_price: 3.6, mrp_snapshot: 60, unit_price: 3.6, discount_amount: 10, gst_rate: 5, line_total: 170 },
+  { sale_item_id: 2, sale_id: 1, branch_id: 1, batch_id: 2, product_id: 2, product_name_snapshot: "Calpol 500", batch_number_snapshot: "KOR-B002", expiry_date_snapshot: "2027-09-30", quantity: 4, mrp: 70, unit_selling_price: 4.2, mrp_snapshot: 70, unit_price: 4.2, discount_amount: 10, gst_rate: 5, line_total: 160 },
+  { sale_item_id: 3, sale_id: 2, branch_id: 1, batch_id: 3, product_id: 3, product_name_snapshot: "Moxikind CV 625", batch_number_snapshot: "KOR-B003", expiry_date_snapshot: "2027-12-31", quantity: 5, mrp: 80, unit_selling_price: 7.2, mrp_snapshot: 80, unit_price: 7.2, discount_amount: 40, gst_rate: 5, line_total: 500 },
 ];
 
 const purchases = [
@@ -266,6 +266,9 @@ async function executeMockQuery(sql, params = []) {
 
   // Branches query
   if (norm.includes("FROM branches") && !norm.includes("sales s")) {
+    if (norm.includes("WHERE branch_id = ?") && params.length > 0) {
+      return [branches.filter((b) => Number(b.branch_id) === Number(params[0]))];
+    }
     return [branches];
   }
 
@@ -353,23 +356,23 @@ async function executeMockQuery(sql, params = []) {
       };
     });
 
-    if (params.length > 0 && typeof params[0] === "number") {
-      list = list.filter((s) => s.branch_id === params[0]);
+    if (params.length > 0 && /^\d+$/.test(String(params[0]))) {
+      list = list.filter((s) => Number(s.branch_id) === Number(params[0]));
     }
     return [list];
   }
 
   // 12. Analytics: branch metrics
   if (norm.includes("SELECT COALESCE(SUM(grand_total), 0) AS total FROM sales") && norm.includes("sale_type = 'BILLED'")) {
-    const branchId = params[0];
-    const bSales = sales.filter((s) => s.branch_id === branchId && s.sale_type === "BILLED" && s.status === "FINALIZED");
+    const branchId = Number(params[0]);
+    const bSales = sales.filter((s) => Number(s.branch_id) === branchId && s.sale_type === "BILLED" && s.status === "FINALIZED");
     const total = bSales.reduce((acc, s) => acc + Number(s.grand_total), 0);
     return [[{ total }]];
   }
 
   if (norm.includes("SELECT COALESCE(SUM(grand_total), 0) AS total FROM sales") && norm.includes("sale_type = 'UNBILLED'")) {
-    const branchId = params[0];
-    const bSales = sales.filter((s) => s.branch_id === branchId && s.sale_type === "UNBILLED");
+    const branchId = Number(params[0]);
+    const bSales = sales.filter((s) => Number(s.branch_id) === branchId && s.sale_type === "UNBILLED");
     const total = bSales.reduce((acc, s) => acc + Number(s.grand_total), 0);
     return [[{ total }]];
   }
@@ -385,22 +388,103 @@ async function executeMockQuery(sql, params = []) {
     return [[{ total }]];
   }
 
-  // 13. Billing: recent / search
+  // 13a. Idempotency check by client_transaction_id
+  if (norm.includes("FROM sales") && norm.includes("WHERE client_transaction_id = ?")) {
+    const txId = params[0];
+    return [sales.filter((s) => s.client_transaction_id === txId)];
+  }
+
+  // 13b. Single bill detail (GET /api/billing/:saleId)
+  if (norm.includes("FROM sales") && norm.includes("WHERE sale_id = ?")) {
+    const saleId = Number(params[0]);
+    const branchId = params[1] != null ? Number(params[1]) : null;
+    return [
+      sales.filter(
+        (s) =>
+          Number(s.sale_id) === saleId &&
+          (branchId == null || Number(s.branch_id) === branchId)
+      ),
+    ];
+  }
+
+  // 13c. Single bill items (GET /api/billing/:saleId)
+  if (norm.includes("FROM sale_items") && norm.includes("WHERE sale_id = ?")) {
+    const saleId = Number(params[0]);
+    const branchId = params[1] != null ? Number(params[1]) : null;
+    return [
+      sale_items.filter(
+        (si) =>
+          Number(si.sale_id) === saleId &&
+          (branchId == null || Number(si.branch_id) === branchId)
+      ),
+    ];
+  }
+
+  // 13d. Patient notes search inside sales (GET /api/billing/patients/search)
+  if (norm.includes("SELECT notes FROM sales") && norm.includes("notes LIKE ?")) {
+    const branchId = Number(params[0]);
+    const rawTerm = String(params[1] || "").replace(/%/g, "").trim().toLowerCase();
+    return [
+      sales.filter(
+        (s) =>
+          Number(s.branch_id) === branchId &&
+          s.sale_type === "BILLED" &&
+          s.notes &&
+          (!rawTerm || s.notes.toLowerCase().includes(rawTerm))
+      ),
+    ];
+  }
+
+  // 13e. Billing: recent / history / search
   if (norm.includes("FROM sales s") && norm.includes("sale_type = 'BILLED'")) {
-    const branchId = params[0];
-    const bSales = sales.filter((s) => s.branch_id === branchId && s.sale_type === "BILLED");
+    const branchId = Number(params[0]);
+    const searchTerm =
+      params.length > 1
+        ? String(params[1] || "").replace(/%/g, "").trim().toLowerCase()
+        : "";
+
+    let bSales = sales.filter(
+      (s) =>
+        Number(s.branch_id) === branchId &&
+        s.sale_type === "BILLED" &&
+        s.status === "FINALIZED"
+    );
+
     const enriched = bSales.map((s) => {
-      const p = patients.find((pt) => pt.patient_id === s.patient_id);
+      const p = patients.find((pt) => Number(pt.patient_id) === Number(s.patient_id));
+      const notesName = (s.notes || "").match(/Patient:\s*([^|]+)/i)?.[1]?.trim();
+      const notesMobile = (s.notes || "").match(/Mobile:\s*([^|]+)/i)?.[1]?.trim();
+      const resolvedName =
+        (p && p.full_name) ||
+        (notesName && notesName !== "N/A" ? notesName : null);
+      const resolvedMobile =
+        (p && p.mobile) ||
+        (notesMobile && notesMobile !== "N/A" ? notesMobile : null);
+
       return {
         ...s,
-        patient_full_name: p ? p.full_name : "Walk-in Patient",
-        patient_name: p ? p.full_name : "Walk-in Patient",
-        patientName: p ? p.full_name : "Walk-in Patient",
-        patient_mobile_db: p ? p.mobile : null,
-        patient_mobile: p ? p.mobile : null,
-        patientMobile: p ? p.mobile : null,
+        patient_full_name: resolvedName,
+        patient_name: resolvedName || "Walk-in Patient",
+        patientName: resolvedName || "Walk-in Patient",
+        patient_mobile_db: resolvedMobile,
+        patient_mobile: resolvedMobile,
+        patientMobile: resolvedMobile,
       };
     });
+
+    if (searchTerm) {
+      return [
+        enriched.filter((row) =>
+          [
+            row.notes || "",
+            row.invoice_number || "",
+            String(row.sale_id),
+            row.patient_full_name || "",
+            row.patient_mobile_db || "",
+          ].some((field) => field.toLowerCase().includes(searchTerm))
+        ),
+      ];
+    }
     return [enriched];
   }
 
@@ -455,50 +539,145 @@ async function executeMockQuery(sql, params = []) {
     return [inventory];
   }
 
-  // 17. Patients search
+  // 17. Patients search & lookup
   if (norm.includes("FROM patients")) {
-    return [patients];
+    const branchId = params[0] != null ? Number(params[0]) : null;
+    if (norm.includes("WHERE branch_id = ? AND mobile = ?")) {
+      const mobile = String(params[1] || "").trim();
+      return [patients.filter((p) => Number(p.branch_id) === branchId && p.mobile === mobile)];
+    }
+    if (norm.includes("WHERE branch_id = ? AND full_name = ?")) {
+      const name = String(params[1] || "").trim().toLowerCase();
+      return [patients.filter((p) => Number(p.branch_id) === branchId && p.full_name.toLowerCase() === name)];
+    }
+    if (norm.includes("WHERE patient_id = ? AND branch_id = ?")) {
+      const pid = Number(params[0]);
+      const bId = Number(params[1]);
+      return [patients.filter((p) => Number(p.patient_id) === pid && Number(p.branch_id) === bId)];
+    }
+    // Search query: p.branch_id = ? AND (p.full_name LIKE ? OR COALESCE(p.mobile, '') LIKE ?)
+    const rawTerm = String(params[1] || "").replace(/%/g, "").trim().toLowerCase();
+    return [
+      patients.filter(
+        (p) =>
+          (branchId == null || Number(p.branch_id) === branchId) &&
+          (!rawTerm ||
+            p.full_name.toLowerCase().includes(rawTerm) ||
+            (p.mobile || "").toLowerCase().includes(rawTerm))
+      ),
+    ];
+  }
+
+  // 17b. Insert patient
+  if (norm.startsWith("INSERT INTO patients")) {
+    const patientId = patients.length + 1;
+    const newPatient = {
+      patient_id: patientId,
+      branch_id: Number(params[0]),
+      full_name: params[1],
+      mobile: params[2] || null,
+    };
+    patients.push(newPatient);
+    return [{ insertId: patientId, affectedRows: 1 }];
   }
 
   // 18. Alerts: low stock
   if (norm.includes("FROM inventory") && norm.includes("low_stock")) {
     return [[]];
   }
-  if (norm.includes("expiry")) {
+  if (norm.startsWith("SELECT") && norm.includes("expiry") && !norm.includes("sale_items")) {
     return [[]];
+  }
+
+  // 18b. Update inventory stock after billing
+  if (norm.startsWith("UPDATE inventory SET quantity = ?, loose_quantity = ?")) {
+    const newQty = Number(params[0]);
+    const newLoose = Number(params[1]);
+    const branchId = Number(params[2]);
+    const batchId = Number(params[3]);
+    const inv = inventory.find(
+      (i) => Number(i.branch_id) === branchId && Number(i.batch_id) === batchId
+    );
+    if (inv) {
+      inv.quantity = newQty;
+      inv.loose_quantity = newLoose;
+    }
+    return [{ affectedRows: inv ? 1 : 0 }];
   }
 
   // 19. Insert into sales
   if (norm.startsWith("INSERT INTO sales")) {
     const saleId = sales.length + 1;
-    const branchId = params[0];
-    const branch = branches.find((b) => b.branch_id === branchId) || branches[0];
-    const newSale = {
-      sale_id: saleId,
-      branch_id: branchId,
-      patient_id: params[1],
-      doctor_id: params[2],
-      sale_type: "BILLED",
-      status: "FINALIZED",
-      invoice_number: params[3],
-      client_transaction_id: params[4],
-      sale_datetime: new Date(),
-      payment_method: params[5],
-      subtotal: params[6],
-      discount_total: params[7],
-      taxable_total: params[8],
-      cgst_total: params[9],
-      sgst_total: params[10],
-      grand_total: params[11],
-      notes: params[12],
-    };
-    sales.unshift(newSale);
+    const isUnbilled = norm.includes("'UNBILLED'");
+    if (isUnbilled) {
+      const newSale = {
+        sale_id: saleId,
+        branch_id: Number(params[0]),
+        patient_id: null,
+        doctor_id: null,
+        sale_type: "UNBILLED",
+        status: "FINALIZED",
+        invoice_number: null,
+        client_transaction_id: params[1],
+        sale_datetime: new Date(),
+        payment_method: params[2],
+        subtotal: params[3],
+        discount_total: params[4],
+        taxable_total: 0,
+        cgst_total: 0,
+        sgst_total: 0,
+        grand_total: params[5],
+        notes: params[6],
+      };
+      sales.unshift(newSale);
+    } else {
+      const newSale = {
+        sale_id: saleId,
+        branch_id: Number(params[0]),
+        patient_id: params[1] != null ? Number(params[1]) : null,
+        doctor_id: params[2] != null ? Number(params[2]) : null,
+        sale_type: "BILLED",
+        status: "FINALIZED",
+        invoice_number: params[3],
+        client_transaction_id: params[4],
+        sale_datetime: new Date(),
+        payment_method: params[5],
+        subtotal: params[6],
+        discount_total: params[7],
+        taxable_total: params[8],
+        cgst_total: params[9],
+        sgst_total: params[10],
+        grand_total: params[11],
+        notes: params[12],
+      };
+      sales.unshift(newSale);
+    }
     return [{ insertId: saleId, affectedRows: 1 }];
   }
 
   // 20. Insert sale items
   if (norm.startsWith("INSERT INTO sale_items")) {
-    return [{ insertId: sale_items.length + 1, affectedRows: 1 }];
+    const saleItemId = sale_items.length + 1;
+    const newItem = {
+      sale_item_id: saleItemId,
+      sale_id: Number(params[0]),
+      branch_id: Number(params[1]),
+      batch_id: Number(params[2]),
+      product_name_snapshot: params[3],
+      batch_number_snapshot: params[4],
+      expiry_date_snapshot: params[5],
+      quantity: Number(params[6]),
+      mrp: Number(params[7]),
+      unit_selling_price: Number(params[8]),
+      discount_amount: Number(params[9]),
+      gst_rate: Number(params[10]),
+      taxable_amount: Number(params[11] || 0),
+      cgst_amount: Number(params[12] || 0),
+      sgst_amount: Number(params[13] || 0),
+      line_total: Number(params[14] ?? params[11] ?? 0),
+    };
+    sale_items.push(newItem);
+    return [{ insertId: saleItemId, affectedRows: 1 }];
   }
 
   // 21. Insert user

@@ -1066,31 +1066,6 @@ button.branch-tile-button:hover:not(:disabled) {
   }
 }
 
-@media print {
-  body * {
-    visibility: hidden;
-  }
-
-  .invoice-preview,
-  .invoice-preview * {
-    visibility: visible;
-  }
-
-  .invoice-preview {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    border: none;
-    box-shadow: none;
-  }
-
-  .invoice-preview button {
-    display: none;
-  }
-}
-
-
-
 /* ===========================
    BILLING LAYOUT IMPROVEMENTS
    =========================== */
@@ -1526,72 +1501,6 @@ button.branch-tile-button:hover:not(:disabled) {
   .checkout-total {
     padding: 14px;
     gap: 10px 14px;
-  }
-}
-
-/* Print only the invoice, not the dashboard/sidebar. */
-@media print {
-  @page {
-    size: A4 portrait;
-    margin: 12mm;
-  }
-
-  body * {
-    visibility: hidden !important;
-  }
-
-  .invoice-preview,
-  .invoice-preview * {
-    visibility: visible !important;
-  }
-
-  .invoice-preview {
-    position: absolute !important;
-    inset: 0 auto auto 0 !important;
-    width: 100% !important;
-    max-width: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    overflow: visible !important;
-  }
-
-  .no-print,
-  .sidebar-user,
-  .app-sidebar,
-  .topbar {
-    display: none !important;
-  }
-
-  .invoice-table-wrap {
-    overflow: visible !important;
-    border: none !important;
-  }
-
-  .billing-page .invoice-table {
-    min-width: 0 !important;
-    width: 100% !important;
-    font-size: 9px !important;
-  }
-
-  .billing-page .invoice-table th,
-  .billing-page .invoice-table td {
-    padding: 6px 4px !important;
-    font-size: 9px !important;
-    overflow-wrap: anywhere;
-  }
-
-  .invoice-top,
-  .invoice-shop-details,
-  .invoice-patient,
-  .invoice-summary {
-    break-inside: avoid;
-  }
-
-  .invoice-footer {
-    margin-top: 20px;
   }
 }
 
@@ -3485,28 +3394,49 @@ button.branch-tile-button:hover:not(:disabled) {
 
 /* Print Overrides */
 @media print {
-  body * {
-    visibility: hidden;
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
   }
 
-  .tax-invoice-sheet,
-  .tax-invoice-sheet * {
-    visibility: visible;
+  .topbar,
+  .app-sidebar,
+  .sidebar-overlay,
+  .page-heading,
+  .no-print,
+  .invoice-action-bar {
+    display: none !important;
+  }
+
+  html,
+  body,
+  #root,
+  .dashboard-page,
+  .app-layout,
+  .app-content,
+  .billing-page,
+  .billing-card,
+  .invoice-preview-container {
+    display: block !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    border: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
   }
 
   .tax-invoice-sheet {
-    position: absolute;
-    left: 0;
-    top: 0;
+    display: block !important;
+    visibility: visible !important;
     width: 100% !important;
     max-width: 100% !important;
     border: 1.5px solid #000000 !important;
     box-shadow: none !important;
-    padding: 12px !important;
+    padding: 12px 14px !important;
     margin: 0 !important;
-  }
-
-  .no-print {
-    display: none !important;
+    page-break-inside: avoid;
   }
 }
