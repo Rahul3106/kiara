@@ -232,6 +232,13 @@ const purchases = [
 
 const customer_returns = [];
 const customer_return_items = [];
+const supplier_returns = [];
+const supplier_return_items = [];
+const suppliers = [
+  { supplier_id: 1, branch_id: 1, supplier_name: "MedPlus Wholesale Depot", phone: "9845011223", gstin: "29AABCM1234D1Z5", address: "Bengaluru", is_active: 1 },
+  { supplier_id: 2, branch_id: 2, supplier_name: "Apollo Pharma Distributors", phone: "9845099887", gstin: "29AABCA5678E1Z2", address: "Bengaluru", is_active: 1 },
+  { supplier_id: 3, branch_id: 3, supplier_name: "Cipla Direct Supply", phone: "9880123456", gstin: "29AABCC9012F1Z8", address: "Bengaluru", is_active: 1 },
+];
 const racks = [
   { rack_id: 1, branch_id: 1, rack_code: "A1" },
   { rack_id: 2, branch_id: 1, rack_code: "A2" },
@@ -947,6 +954,88 @@ async function executeMockQuery(sql, params = []) {
       agg.set(Number(si.sale_id), (agg.get(Number(si.sale_id)) || 0) + Number(si.quantity || 0));
     }
     return [Array.from(agg.entries()).map(([sale_id, units_sold]) => ({ sale_id, units_sold }))];
+  }
+
+  // 25. Supplier returns lookup & creation
+  if (norm.includes("FROM supplier_returns sr") && norm.includes("WHERE sr.branch_id = ?")) {
+    const branchId = Number(params[0]);
+    const sups = suppliers.filter((s) => Number(s.branch_id) === branchId);
+    return [
+      supplier_returns
+        .filter((sr) => Number(sr.branch_id) === branchId)
+        .map((sr) => {
+          const sup = sups.find((s) => Number(s.supplier_id) === Number(sr.supplier_id));
+          return {
+            ...sr,
+            supplier_name: sup?.supplier_name || "Supplier",
+            supplier_phone: sup?.phone || "",
+          };
+        }),
+    ];
+  }
+
+  if (norm.includes("FROM supplier_return_items sri") && norm.includes("WHERE sr.branch_id = ?")) {
+    const branchId = Number(params[0]);
+    return [
+      supplier_return_items
+        .filter((sri) => Number(sri.branch_id) === branchId)
+        .map((sri) => {
+          const b = batches.find((bat) => Number(bat.batch_id) === Number(sri.batch_id));
+          const p = b ? products.find((pr) => Number(pr.product_id) === Number(b.product_id)) : null;
+          return {
+            ...sri,
+            batch_number: b?.batch_number || "",
+            product_name: p?.product_name || "Medicine",
+          };
+        }),
+    ];
+  }
+
+  if (norm.includes("FROM supplier_returns WHERE client_transaction_id = ?")) {
+    return [supplier_returns.filter((sr) => sr.client_transaction_id === params[0])];
+  }
+
+  if (norm.includes("FROM suppliers WHERE supplier_id = ? AND branch_id = ?")) {
+    return [
+      suppliers.filter(
+        (s) => Number(s.supplier_id) === Number(params[0]) && Number(s.branch_id) === Number(params[1])
+      ),
+    ];
+  }
+
+  if (norm.startsWith("INSERT INTO supplier_returns")) {
+    const id = supplier_returns.length + 1;
+    supplier_returns.unshift({
+      supplier_return_id: id,
+      branch_id: Number(params[0]),
+      supplier_id: Number(params[1]),
+      return_datetime: new Date(),
+      reference_number: params[2],
+      return_total: 0,
+      reason: params[3],
+      client_transaction_id: params[4],
+    });
+    return [{ insertId: id, affectedRows: 1 }];
+  }
+
+  if (norm.startsWith("UPDATE supplier_returns SET return_total = ?")) {
+    const sr = supplier_returns.find((r) => Number(r.supplier_return_id) === Number(params[1]));
+    if (sr) sr.return_total = Number(params[0]);
+    return [{ affectedRows: sr ? 1 : 0 }];
+  }
+
+  if (norm.startsWith("INSERT INTO supplier_return_items")) {
+    const id = supplier_return_items.length + 1;
+    supplier_return_items.push({
+      supplier_return_item_id: id,
+      supplier_return_id: Number(params[0]),
+      branch_id: Number(params[1]),
+      batch_id: Number(params[2]),
+      quantity: Number(params[3]),
+      purchase_price: Number(params[4]),
+      line_total: Number(params[5]),
+    });
+    return [{ insertId: id, affectedRows: 1 }];
   }
 
   // Default fallback

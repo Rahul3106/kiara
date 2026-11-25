@@ -242,6 +242,68 @@ router.post("/customer", authenticateToken, requireShopUser, async (req, res) =>
   }
 });
 
+router.get("/supplier", authenticateToken, requireShopUser, async (req, res) => {
+  try {
+    const branchId = resolveBranchId(req.user);
+    const [returns] = await pool.query(
+      `SELECT
+         sr.supplier_return_id,
+         sr.supplier_id,
+         sr.return_datetime,
+         sr.reference_number,
+         sr.return_total,
+         sr.reason,
+         s.supplier_name,
+         s.phone AS supplier_phone
+       FROM supplier_returns sr
+       JOIN suppliers s ON s.supplier_id = sr.supplier_id
+       WHERE sr.branch_id = ?
+       ORDER BY sr.return_datetime DESC
+       LIMIT 100`,
+      [branchId]
+    );
+
+    const [itemRows] = await pool.query(
+      `SELECT
+         sri.supplier_return_item_id,
+         sri.supplier_return_id,
+         sri.batch_id,
+         sri.quantity,
+         sri.purchase_price,
+         sri.line_total,
+         ba.batch_number,
+         p.product_name
+       FROM supplier_return_items sri
+       JOIN supplier_returns sr ON sr.supplier_return_id = sri.supplier_return_id
+       JOIN batches ba ON ba.batch_id = sri.batch_id AND ba.branch_id = sri.branch_id
+       JOIN products p ON p.product_id = ba.product_id
+       WHERE sr.branch_id = ?
+       ORDER BY sri.supplier_return_item_id ASC`,
+      [branchId]
+    );
+
+    const itemsByReturn = new Map();
+    for (const item of itemRows) {
+      const id = Number(item.supplier_return_id);
+      if (!itemsByReturn.has(id)) itemsByReturn.set(id, []);
+      itemsByReturn.get(id).push(item);
+    }
+
+    const enriched = returns.map((r) => ({
+      ...r,
+      items: itemsByReturn.get(Number(r.supplier_return_id)) || [],
+    }));
+
+    res.json({ success: true, returns: enriched });
+  } catch (error) {
+    console.error("List supplier returns error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Unable to load supplier returns.",
+    });
+  }
+});
+
 router.post("/supplier", authenticateToken, requireShopUser, async (req, res) => {
   const connection = await pool.getConnection();
   let started = false;

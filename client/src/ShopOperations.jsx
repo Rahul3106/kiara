@@ -2381,6 +2381,7 @@ function supplierCreditAmount(item, quantity) {
 
 export function SupplierReturn({ apiUrl, token, searchBatches }) {
   const [suppliers, setSuppliers] = useState([]);
+  const [history, setHistory] = useState([]);
   const [header, setHeader] = useState({
     supplierId: "",
     referenceNumber: "",
@@ -2394,20 +2395,25 @@ export function SupplierReturn({ apiUrl, token, searchBatches }) {
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${apiUrl}/api/purchases/suppliers`, {
-          headers: headers(token),
-        });
-        const data = await readJsonResponse(res, "Could not load suppliers.");
-        if (res.ok) setSuppliers(data.suppliers || []);
-        else setError(data.message || "Could not load suppliers.");
-      } catch (err) {
-        setError(err.message);
-      }
-    })();
+  const loadInitial = useCallback(async () => {
+    try {
+      const [sRes, hRes] = await Promise.all([
+        fetch(`${apiUrl}/api/purchases/suppliers`, { headers: headers(token) }),
+        fetch(`${apiUrl}/api/returns/supplier`, { headers: headers(token) }),
+      ]);
+      const sData = await readJsonResponse(sRes, "Could not load suppliers.");
+      const hData = await readJsonResponse(hRes, "Could not load supplier returns.");
+      if (sRes.ok) setSuppliers(sData.suppliers || []);
+      else setError(sData.message || "Could not load suppliers.");
+      if (hRes.ok) setHistory(hData.returns || []);
+    } catch (err) {
+      setError(err.message);
+    }
   }, [apiUrl, token]);
+
+  useEffect(() => {
+    loadInitial();
+  }, [loadInitial]);
 
   useEffect(() => {
     const query = search.trim();
@@ -2535,6 +2541,8 @@ export function SupplierReturn({ apiUrl, token, searchBatches }) {
       setCart([]);
       setSearch("");
       setResults([]);
+      setHeader((prev) => ({ ...prev, referenceNumber: "", reason: "" }));
+      await loadInitial();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -2739,6 +2747,60 @@ export function SupplierReturn({ apiUrl, token, searchBatches }) {
           </>
         )}
       </form>
+
+      <div className="table-card">
+        <h3>Supplier return history ({history.length})</h3>
+        {history.length === 0 ? (
+          <p className="empty-state">No supplier returns recorded yet.</p>
+        ) : (
+          <div className="table-scroll">
+            <table className="products-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Supplier</th>
+                  <th>Reference / RGA #</th>
+                  <th>Reason</th>
+                  <th>Returned items</th>
+                  <th>Credit (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((row) => (
+                  <tr key={row.supplier_return_id}>
+                    <td>{String(row.return_datetime).slice(0, 16)}</td>
+                    <td>
+                      <strong>{row.supplier_name}</strong>
+                      {row.supplier_phone && <small>{row.supplier_phone}</small>}
+                    </td>
+                    <td>
+                      <code>{row.reference_number}</code>
+                    </td>
+                    <td>{row.reason || "—"}</td>
+                    <td>
+                      {(row.items || []).length === 0 ? (
+                        "—"
+                      ) : (
+                        <div className="supplier-return-items-cell">
+                          {row.items.map((it) => (
+                            <div key={it.supplier_return_item_id}>
+                              <strong>{it.product_name}</strong> ({it.batch_number}) ×{" "}
+                              {it.quantity} — ₹{Number(it.line_total).toFixed(2)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <strong>₹{Number(row.return_total).toFixed(2)}</strong>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </>
   );
 }
