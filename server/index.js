@@ -50,11 +50,14 @@ app.get("/api", (req, res) => {
 });
 
 app.get("/api/health", (req, res) => {
+  const dbStatus = pool.getStatus();
   res.json({
     success: true,
     status: "ok",
     environment: env.nodeEnv,
-    dbMode: pool.isMockMode() ? "mock" : "mysql",
+    dbMode: dbStatus.mode,
+    dbConnected: dbStatus.connected,
+    ...(dbStatus.error ? { dbError: dbStatus.error } : {}),
     uptimeSeconds: Math.round(process.uptime()),
   });
 });
@@ -78,6 +81,7 @@ app.get("/api/health/db", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "MySQL connection failed.",
+      error: error.code || error.message,
     });
   }
 });

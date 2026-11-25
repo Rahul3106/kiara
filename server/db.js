@@ -4,6 +4,20 @@ const { executeMockQuery, createMockConnection } = require("./mockDb");
 const { ensureSchemaReady } = require("./lib/ensureSchemaReady");
 
 let isMockMode = env.db.useMock;
+let dbConnected = false;
+let lastDbError = null;
+
+function isConnectionError(err) {
+  const code = err?.code || "";
+  return [
+    "ETIMEDOUT",
+    "ECONNREFUSED",
+    "ENOTFOUND",
+    "EHOSTUNREACH",
+    "ECONNRESET",
+    "PROTOCOL_CONNECTION_LOST",
+  ].includes(code) || /timed out|ETIMEDOUT|ECONNREFUSED/i.test(err?.message || "");
+}
 
 const rawPool = isMockMode
   ? null
@@ -24,23 +38,25 @@ const rawPool = isMockMode
 if (!isMockMode) {
   (async () => {
     try {
-      const conn = await Promise.race([
-        rawPool.getConnection(),
-        new Promise((_, reject) =>
-          setTimeout(
-            () => reject(new Error("Database connection timed out")),
-            env.db.connectTimeout
-          )
-        ),
-      ]);
+      const conn = await rawPool.getConnection();
       conn.release();
+      dbConnected = true;
+      lastDbError = null;
       console.log("Connected to MySQL successfully!");
       ensureSchemaReady(poolWrapper);
     } catch (err) {
-      console.warn(
-        `MySQL not available (${err.message}). Using local store fallback.`
-      );
-      isMockMode = true;
+      dbConnected = false;
+      lastDbError = `${err.code || "ERR"}: ${err.message}`;
+      if (env.db.allowMockFallback) {
+        console.warn(
+          `MySQL not available (${err.message}). Using local store fallback.`
+        );
+        isMockMode = true;
+      } else {
+        console.error(
+          `MySQL connection error (${lastDbError}). Check DB credentials, DB_CONNECT_TIMEOUT_MS (${env.db.connectTimeout}ms), or Aiven Allowed IP Addresses.`
+        );
+      }
     }
   })();
 } else {
@@ -52,16 +68,31 @@ const poolWrapper = {
     return isMockMode;
   },
 
+  getStatus() {
+    if (isMockMode) return { mode: "mock", connected: true, error: lastDbError };
+    return { mode: "mysql", connected: dbConnected, error: lastDbError };
+  },
+
   async execute(sql, params) {
     if (isMockMode) {
       return executeMockQuery(sql, params);
     }
     try {
-      return await rawPool.execute(sql, params);
+      const res = await rawPool.execute(sql, params);
+      dbConnected = true;
+      lastDbError = null;
+      return res;
     } catch (err) {
-      console.warn(`MySQL error (${err.message}), falling back to local store.`);
-      isMockMode = true;
-      return executeMockQuery(sql, params);
+      if (isConnectionError(err)) {
+        dbConnected = false;
+        lastDbError = `${err.code || "ERR"}: ${err.message}`;
+        if (env.db.allowMockFallback) {
+          console.warn(`MySQL error (${err.message}), falling back to local store.`);
+          isMockMode = true;
+          return executeMockQuery(sql, params);
+        }
+      }
+      throw err;
     }
   },
 
@@ -70,11 +101,21 @@ const poolWrapper = {
       return executeMockQuery(sql, params);
     }
     try {
-      return await rawPool.query(sql, params);
+      const res = await rawPool.query(sql, params);
+      dbConnected = true;
+      lastDbError = null;
+      return res;
     } catch (err) {
-      console.warn(`MySQL error (${err.message}), falling back to local store.`);
-      isMockMode = true;
-      return executeMockQuery(sql, params);
+      if (isConnectionError(err)) {
+        dbConnected = false;
+        lastDbError = `${err.code || "ERR"}: ${err.message}`;
+        if (env.db.allowMockFallback) {
+          console.warn(`MySQL error (${err.message}), falling back to local store.`);
+          isMockMode = true;
+          return executeMockQuery(sql, params);
+        }
+      }
+      throw err;
     }
   },
 
@@ -83,11 +124,21 @@ const poolWrapper = {
       return createMockConnection();
     }
     try {
-      return await rawPool.getConnection();
+      const conn = await rawPool.getConnection();
+      dbConnected = true;
+      lastDbError = null;
+      return conn;
     } catch (err) {
-      console.warn(`MySQL error (${err.message}), falling back to local connection.`);
-      isMockMode = true;
-      return createMockConnection();
+      if (isConnectionError(err)) {
+        dbConnected = false;
+        lastDbError = `${err.code || "ERR"}: ${err.message}`;
+        if (env.db.allowMockFallback) {
+          console.warn(`MySQL error (${err.message}), falling back to local connection.`);
+          isMockMode = true;
+          return createMockConnection();
+        }
+      }
+      throw err;
     }
   },
 

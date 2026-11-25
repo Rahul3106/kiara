@@ -13,6 +13,8 @@ services:
         value: "5000"
       - key: DB_SSL
         value: "true"
+      - key: DB_CONNECT_TIMEOUT_MS
+        value: "15000"
       - key: DB_USE_MOCK
         value: "false"
       - key: JWT_EXPIRES_IN

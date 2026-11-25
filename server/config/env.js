@@ -57,8 +57,9 @@ const env = Object.freeze({
     name: (process.env.DB_NAME || "kiara_medicals").trim(),
     ssl: toBool(process.env.DB_SSL, /aivencloud\.com/i.test(dbHost)),
     connectionLimit: toInt(process.env.DB_CONNECTION_LIMIT, 10),
-    connectTimeout: toInt(process.env.DB_CONNECT_TIMEOUT_MS, 2500),
+    connectTimeout: toInt(process.env.DB_CONNECT_TIMEOUT_MS, isProd ? 15000 : 3000),
     useMock: toBool(process.env.DB_USE_MOCK, false),
+    allowMockFallback: toBool(process.env.DB_ALLOW_MOCK_FALLBACK, !isProd),
   }),
 
   jwt: Object.freeze({
