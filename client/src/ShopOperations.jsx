@@ -1991,6 +1991,97 @@ export function PastBills({ apiUrl, token }) {
   );
 }
 
+function BillLookupField({
+  title,
+  searchTerm,
+  onSearchChange,
+  bills,
+  selectedId,
+  onSelectBill,
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  return (
+    <div className="billing-card">
+      <h3>{title}</h3>
+      <label className="patient-field-with-suggest">
+        Search &amp; select bill ({bills.length} available)
+        <div className="purchase-combobox-wrap">
+          <input
+            type="search"
+            autoComplete="off"
+            value={searchTerm}
+            onFocus={() => setMenuOpen(true)}
+            onBlur={() => window.setTimeout(() => setMenuOpen(false), 180)}
+            onChange={(e) => {
+              onSearchChange(e.target.value);
+              if (selectedId) onSelectBill(null, { keepQuery: true });
+              setMenuOpen(true);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setMenuOpen(false);
+            }}
+            placeholder="Type patient name, mobile, or KM-... (or click to browse)"
+          />
+          {(searchTerm || selectedId) && (
+            <button
+              type="button"
+              className="combobox-clear-btn"
+              aria-label="Clear selected bill"
+              onClick={() => {
+                onSearchChange("");
+                onSelectBill(null);
+                setMenuOpen(true);
+              }}
+            >
+              ×
+            </button>
+          )}
+        </div>
+        {menuOpen && (
+          <ul className="patient-suggest-list" role="listbox">
+            {bills.length === 0 ? (
+              <li className="patient-suggest-empty">
+                No bills match “{searchTerm}”.
+              </li>
+            ) : (
+              bills.slice(0, 25).map((b) => {
+                const name = b.patient_name || b.patientName || "Walk-in";
+                const mobile = b.patient_mobile || b.patientMobile || "";
+                const inv = b.invoice_number || `#${b.sale_id}`;
+                return (
+                  <li key={b.sale_id}>
+                    <button
+                      type="button"
+                      className="patient-suggest-item"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        onSelectBill(b);
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <strong>
+                        {name} · {inv}
+                      </strong>
+                      <span>
+                        {[
+                          mobile || "No mobile",
+                          String(b.sale_datetime).slice(0, 16),
+                          `₹${Number(b.grand_total).toFixed(2)}`,
+                        ].join(" · ")}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        )}
+      </label>
+    </div>
+  );
+}
+
 export function CustomerReturn({ apiUrl, token }) {
   const [bills, setBills] = useState([]);
   const [selectedId, setSelectedId] = useState("");
@@ -2013,8 +2104,9 @@ export function CustomerReturn({ apiUrl, token }) {
   }, [apiUrl, token]);
 
   useEffect(() => {
+    if (selectedId) return;
     loadRecentBills(searchTerm);
-  }, [loadRecentBills, searchTerm]);
+  }, [loadRecentBills, searchTerm, selectedId]);
 
   async function loadBill(saleId) {
     setSelectedId(saleId);
@@ -2141,34 +2233,24 @@ export function CustomerReturn({ apiUrl, token }) {
         </div>
       )}
 
-      <div className="billing-card">
-        <h3>Find bill to return</h3>
-        <div className="billing-grid">
-          <label>
-            Search by patient name, mobile, or invoice #
-            <input
-              type="search"
-              placeholder="Type patient name, mobile, or KM-..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </label>
-          <label>
-            Matched bills ({bills.length})
-            <select
-              value={selectedId}
-              onChange={(e) => loadBill(e.target.value)}
-            >
-              <option value="">Select bill to process return</option>
-              {bills.map((b) => (
-                <option key={b.sale_id} value={b.sale_id}>
-                  {b.patient_name || b.patientName || "Walk-in"} · {b.invoice_number || `#${b.sale_id}`} — ₹{Number(b.grand_total).toFixed(2)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </div>
+      <BillLookupField
+        title="Find bill to return"
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        bills={bills}
+        selectedId={selectedId}
+        onSelectBill={(b, opts) => {
+          if (!b) {
+            setSelectedId("");
+            setBill(null);
+            if (!opts?.keepQuery) setSearchTerm("");
+            return;
+          }
+          const name = b.patient_name || b.patientName || "Walk-in";
+          setSearchTerm(`${name} · ${b.invoice_number || `#${b.sale_id}`}`);
+          loadBill(b.sale_id);
+        }}
+      />
 
       {bill?.sale && (
         <div className="notice-card bill-summary-banner">
@@ -2685,8 +2767,9 @@ export function EditBill({ apiUrl, token, searchMedicines }) {
   }, [apiUrl, token]);
 
   useEffect(() => {
+    if (selectedId) return;
     refreshBillList(searchBillTerm).catch(() => {});
-  }, [refreshBillList, searchBillTerm]);
+  }, [refreshBillList, searchBillTerm, selectedId]);
 
   async function loadBill(saleId) {
     if (!saleId) {
@@ -2825,31 +2908,25 @@ export function EditBill({ apiUrl, token, searchMedicines }) {
       {error && <div className="error-message">{error}</div>}
       {message && <div className="notice-card">{message}</div>}
 
-      <div className="billing-card">
-        <h3>Find bill to edit</h3>
-        <div className="billing-grid">
-          <label>
-            Search by patient name, mobile, or invoice #
-            <input
-              type="search"
-              placeholder="Type patient name, mobile, or KM-..."
-              value={searchBillTerm}
-              onChange={(e) => setSearchBillTerm(e.target.value)}
-            />
-          </label>
-          <label>
-            Matched bills ({bills.length})
-            <select value={selectedId} onChange={(e) => loadBill(e.target.value)}>
-              <option value="">Select bill to edit</option>
-              {bills.map((b) => (
-                <option key={b.sale_id} value={b.sale_id}>
-                  {b.patient_name || b.patientName || "Walk-in"} · {b.invoice_number || `#${b.sale_id}`} — ₹{Number(b.grand_total).toFixed(2)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </div>
+      <BillLookupField
+        title="Find bill to edit"
+        searchTerm={searchBillTerm}
+        onSearchChange={setSearchBillTerm}
+        bills={bills}
+        selectedId={selectedId}
+        onSelectBill={(b, opts) => {
+          if (!b) {
+            setSelectedId("");
+            setBill(null);
+            setEditItems([]);
+            if (!opts?.keepQuery) setSearchBillTerm("");
+            return;
+          }
+          const name = b.patient_name || b.patientName || "Walk-in";
+          setSearchBillTerm(`${name} · ${b.invoice_number || `#${b.sale_id}`}`);
+          loadBill(b.sale_id);
+        }}
+      />
 
       {bill && (
         <div className="notice-card bill-summary-banner">
