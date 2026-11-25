@@ -21,6 +21,7 @@ import {
 } from "./AdminViews.jsx";
 import {
   CustomerReturn,
+  DoctorSalesReport,
   EditBill,
   PurchaseStock,
   ShopAlerts,
@@ -691,6 +692,7 @@ const finalTotal = Math.max(
       ].join(" | "),
       patientName: patient.name.trim(),
       patientMobile: patient.mobile.trim(),
+      doctorName: patient.doctorName.trim(),
       billDiscount: Number(billDiscount || 0),
       items: cart.map((item) => ({
         batchId: Number(item.batch_id),
@@ -1809,6 +1811,9 @@ function printInvoice() {
               <NavLink to="/customer-return" className={navClass}>
                 <span>↩</span> Cust. return
               </NavLink>
+              <NavLink to="/doctor-sales" className={navClass}>
+                <span>⚕</span> Doctor sales
+              </NavLink>
 
               {/* Management-specific operations */}
               {canManageShop && (
@@ -1849,6 +1854,9 @@ function printInvoice() {
               </NavLink>
               <NavLink to="/admin/users" className={navClass}>
                 <span>◎</span> Users
+              </NavLink>
+              <NavLink to="/admin/doctor-sales" className={navClass}>
+                <span>⚕</span> Doctor sales
               </NavLink>
             </>
           )}
@@ -2072,6 +2080,31 @@ function printInvoice() {
                   <ShopAnalytics apiUrl={API_URL} token={session.token} />
                 ) : (
                   <Navigate to="/dashboard" replace />
+                )
+              }
+            />
+            <Route
+              path="/doctor-sales"
+              element={
+                !isAdmin ? (
+                  <DoctorSalesReport apiUrl={API_URL} token={session.token} />
+                ) : (
+                  <Navigate to="/admin/doctor-sales" replace />
+                )
+              }
+            />
+            <Route
+              path="/admin/doctor-sales"
+              element={
+                isAdmin ? (
+                  <DoctorSalesReport
+                    apiUrl={API_URL}
+                    token={session.token}
+                    isAdmin
+                    branches={adminBranches}
+                  />
+                ) : (
+                  <Navigate to="/doctor-sales" replace />
                 )
               }
             />

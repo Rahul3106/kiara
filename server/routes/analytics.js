@@ -205,4 +205,223 @@ router.get(
   }
 );
 
+function parseDoctorFromNotes(notes) {
+  if (!notes || typeof notes !== "string") return "";
+  const m = notes.match(/Doctor:\s*([^|]+)/i);
+  if (!m) return "";
+  const val = m[1].trim();
+  if (!val || /^(n\/a|na|self|-|—)$/i.test(val)) return "";
+  return val;
+}
+
+function normalizeDoctorKey(name) {
+  return String(name || "")
+    .toLowerCase()
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+router.get(
+  "/doctor-sales",
+  authenticateToken,
+  allowRoles("ADMIN", "SHOP_MANAGER", "SHOP_USER"),
+  async (req, res) => {
+    try {
+      const period = ["day", "week", "month", "all"].includes(req.query.period)
+        ? req.query.period
+        : "month";
+      const search =
+        typeof req.query.search === "string" ? req.query.search.trim().toLowerCase() : "";
+
+      let effectiveBranchId = null;
+      if (["SHOP_USER", "SHOP_MANAGER"].includes(req.user.role)) {
+        effectiveBranchId = Number(req.user.branchId);
+      } else if (req.query.branchId) {
+        if (!/^\d+$/.test(String(req.query.branchId).trim())) {
+          return res.status(400).json({ success: false, message: "Invalid branchId." });
+        }
+        effectiveBranchId = Number(req.query.branchId);
+      }
+
+      const whenClause =
+        period === "all" ? "1=1" : periodDateFilter("s.sale_datetime", period);
+
+      let salesSql = `
+        SELECT
+          s.sale_id,
+          s.branch_id,
+          b.branch_name,
+          s.invoice_number,
+          s.sale_datetime,
+          s.payment_method,
+          s.grand_total,
+          s.notes,
+          s.doctor_id,
+          d.full_name AS doctor_full_name,
+          s.patient_id,
+          p.full_name AS patient_full_name
+        FROM sales s
+        JOIN branches b ON b.branch_id = s.branch_id
+        LEFT JOIN doctors d ON d.doctor_id = s.doctor_id AND d.branch_id = s.branch_id
+        LEFT JOIN patients p ON p.patient_id = s.patient_id AND p.branch_id = s.branch_id
+        WHERE s.status = 'FINALIZED'
+          AND s.sale_type = 'BILLED'
+          AND ${whenClause}
+      `;
+      const salesParams = [];
+      if (effectiveBranchId != null) {
+        salesSql += " AND s.branch_id = ?";
+        salesParams.push(effectiveBranchId);
+      }
+      salesSql += " ORDER BY s.sale_datetime DESC";
+
+      const [salesRows] = await pool.query(salesSql, salesParams);
+
+      let retSql = `
+        SELECT sale_id, COALESCE(SUM(return_total), 0) AS returned_total
+        FROM customer_returns
+      `;
+      const retParams = [];
+      if (effectiveBranchId != null) {
+        retSql += " WHERE branch_id = ?";
+        retParams.push(effectiveBranchId);
+      }
+      retSql += " GROUP BY sale_id";
+      const [retRows] = await pool.query(retSql, retParams);
+      const returnsBySale = new Map(
+        retRows.map((r) => [Number(r.sale_id), Number(r.returned_total || 0)])
+      );
+
+      let qtySql = `
+        SELECT sale_id, COALESCE(SUM(quantity), 0) AS units_sold
+        FROM sale_items
+      `;
+      const qtyParams = [];
+      if (effectiveBranchId != null) {
+        qtySql += " WHERE branch_id = ?";
+        qtyParams.push(effectiveBranchId);
+      }
+      qtySql += " GROUP BY sale_id";
+      const [qtyRows] = await pool.query(qtySql, qtyParams);
+      const unitsBySale = new Map(
+        qtyRows.map((q) => [Number(q.sale_id), Number(q.units_sold || 0)])
+      );
+
+      const doctorMap = new Map();
+
+      for (const row of salesRows) {
+        const rawDoc =
+          (row.doctor_full_name && String(row.doctor_full_name).trim()) ||
+          parseDoctorFromNotes(row.notes) ||
+          "Walk-in / Self (No Doctor)";
+
+        if (search && !rawDoc.toLowerCase().includes(search)) {
+          continue;
+        }
+
+        const key = `${effectiveBranchId == null ? "ALL" : row.branch_id}:${normalizeDoctorKey(rawDoc)}`;
+        const gross = Number(row.grand_total || 0);
+        const ret = returnsBySale.get(Number(row.sale_id)) || 0;
+        const net = Math.max(0, Number((gross - ret).toFixed(2)));
+        const units = unitsBySale.get(Number(row.sale_id)) || 0;
+
+        const patMatch = (row.notes || "").match(/Patient:\s*([^|]+)/i);
+        const patientName =
+          row.patient_full_name ||
+          (patMatch && patMatch[1].trim() !== "N/A" ? patMatch[1].trim() : "Walk-in Patient");
+        const patientKey = row.patient_id ? `id:${row.patient_id}` : `name:${patientName.toLowerCase()}`;
+
+        if (!doctorMap.has(key)) {
+          doctorMap.set(key, {
+            doctorKey: key,
+            doctorName: rawDoc,
+            isWalkIn: rawDoc === "Walk-in / Self (No Doctor)",
+            branchNames: new Set(),
+            billCount: 0,
+            patientKeys: new Set(),
+            unitsSold: 0,
+            grossBilled: 0,
+            customerReturns: 0,
+            netSales: 0,
+            lastSaleDate: row.sale_datetime,
+            bills: [],
+          });
+        }
+
+        const entry = doctorMap.get(key);
+        entry.branchNames.add(row.branch_name);
+        entry.billCount += 1;
+        entry.patientKeys.add(patientKey);
+        entry.unitsSold += units;
+        entry.grossBilled += gross;
+        entry.customerReturns += ret;
+        entry.netSales += net;
+        if (entry.bills.length < 30) {
+          entry.bills.push({
+            sale_id: row.sale_id,
+            invoice_number: row.invoice_number,
+            branch_name: row.branch_name,
+            patientName,
+            sale_datetime: row.sale_datetime,
+            payment_method: row.payment_method,
+            gross_billed: Number(gross.toFixed(2)),
+            returned_total: Number(ret.toFixed(2)),
+            net_total: net,
+          });
+        }
+      }
+
+      const doctors = Array.from(doctorMap.values())
+        .map((d) => ({
+          doctorKey: d.doctorKey,
+          doctorName: d.doctorName,
+          isWalkIn: d.isWalkIn,
+          branchName: Array.from(d.branchNames).join(", "),
+          billCount: d.billCount,
+          patientCount: d.patientKeys.size,
+          unitsSold: d.unitsSold,
+          grossBilled: Number(d.grossBilled.toFixed(2)),
+          customerReturns: Number(d.customerReturns.toFixed(2)),
+          netSales: Number(d.netSales.toFixed(2)),
+          lastSaleDate: d.lastSaleDate,
+          bills: d.bills,
+        }))
+        .sort((a, b) => {
+          if (a.isWalkIn !== b.isWalkIn) return a.isWalkIn ? 1 : -1;
+          return b.netSales - a.netSales;
+        });
+
+      const summary = doctors.reduce(
+        (acc, d) => {
+          if (!d.isWalkIn) acc.doctorCount += 1;
+          acc.totalBills += d.billCount;
+          acc.grossBilled += d.grossBilled;
+          acc.customerReturns += d.customerReturns;
+          acc.netSales += d.netSales;
+          return acc;
+        },
+        { doctorCount: 0, totalBills: 0, grossBilled: 0, customerReturns: 0, netSales: 0 }
+      );
+      summary.grossBilled = Number(summary.grossBilled.toFixed(2));
+      summary.customerReturns = Number(summary.customerReturns.toFixed(2));
+      summary.netSales = Number(summary.netSales.toFixed(2));
+
+      res.json({
+        success: true,
+        period,
+        branchId: effectiveBranchId,
+        summary,
+        doctors,
+      });
+    } catch (error) {
+      console.error("Doctor sales report error:", error.message);
+      res.status(500).json({
+        success: false,
+        message: "Unable to load doctor-wise sales report.",
+      });
+    }
+  }
+);
+
 module.exports = router;

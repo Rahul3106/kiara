@@ -3762,6 +3762,55 @@ button.branch-tile-button:hover:not(:disabled) {
   box-sizing: border-box;
 }
 
+/* Doctor-wise Sales Report */
+.doctor-report-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+}
+
+.doctor-report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.doctor-report-filters input,
+.doctor-report-filters select {
+  min-width: 210px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font: inherit;
+  background: #fff;
+}
+
+.doctor-bills-drawer {
+  margin-top: 22px;
+  padding: 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.doctor-bills-drawer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.doctor-bills-drawer-head h4 {
+  margin: 0;
+  font-size: 16px;
+  color: #1e293b;
+}
+
 @media (max-width: 640px) {
   .bill-summary-total {
     align-items: flex-start;

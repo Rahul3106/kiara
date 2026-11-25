@@ -240,6 +240,10 @@ const racks = [
   { rack_id: 5, branch_id: 2, rack_code: "B1" },
   { rack_id: 6, branch_id: 3, rack_code: "A1" },
 ];
+const doctors = [
+  { doctor_id: 1, branch_id: 1, full_name: "Dr. Arvind Mehta" },
+  { doctor_id: 2, branch_id: 2, full_name: "Dr. Kavita Rao" },
+];
 const branchProductRacks = new Map([
   ["1:1", 1],
   ["1:2", 2],
@@ -452,18 +456,22 @@ async function executeMockQuery(sql, params = []) {
     ];
   }
 
-  // 11. Admin sales list (with patient join and search)
+  // 11. Admin sales list (with patient/doctor join and search)
   if (norm.includes("FROM sales s") && norm.includes("JOIN branches b ON b.branch_id = s.branch_id")) {
-    let list = sales.map((s) => {
-      const b = branches.find((br) => br.branch_id === s.branch_id);
-      const p = patients.find((pt) => pt.patient_id === s.patient_id);
-      return {
-        ...s,
-        branch_name: b ? b.branch_name : "Kiara Medicals",
-        patient_full_name: p ? p.full_name : "Walk-in Patient",
-        patient_name: p ? p.full_name : "Walk-in Patient",
-        patientName: p ? p.full_name : "Walk-in Patient",
-        patient_mobile_db: p ? p.mobile : null,
+    let list = sales
+      .filter((s) => !norm.includes("sale_type = 'BILLED'") || s.sale_type === "BILLED")
+      .map((s) => {
+        const b = branches.find((br) => br.branch_id === s.branch_id);
+        const p = patients.find((pt) => pt.patient_id === s.patient_id);
+        const d = doctors.find((dr) => Number(dr.doctor_id) === Number(s.doctor_id));
+        return {
+          ...s,
+          branch_name: b ? b.branch_name : "Kiara Medicals",
+          doctor_full_name: d ? d.full_name : null,
+          patient_full_name: p ? p.full_name : null,
+          patient_name: p ? p.full_name : "Walk-in Patient",
+          patientName: p ? p.full_name : "Walk-in Patient",
+          patient_mobile_db: p ? p.mobile : null,
         patient_mobile: p ? p.mobile : null,
         patientMobile: p ? p.mobile : null,
       };
@@ -910,6 +918,35 @@ async function executeMockQuery(sql, params = []) {
     const key = `${Number(params[0])}:${Number(params[1])}`;
     branchProductRacks.set(key, params[2] != null ? Number(params[2]) : null);
     return [{ affectedRows: 1 }];
+  }
+
+  // 24. Doctors & doctor-wise sales helpers
+  if (norm.includes("FROM doctors WHERE branch_id = ?") && norm.includes("LOWER(TRIM(full_name)) = LOWER(?)")) {
+    const branchId = Number(params[0]);
+    const name = String(params[1] || "").trim().toLowerCase();
+    return [doctors.filter((d) => Number(d.branch_id) === branchId && d.full_name.trim().toLowerCase() === name)];
+  }
+
+  if (norm.includes("FROM doctors WHERE doctor_id = ? AND branch_id = ?")) {
+    const docId = Number(params[0]);
+    const branchId = Number(params[1]);
+    return [doctors.filter((d) => Number(d.doctor_id) === docId && Number(d.branch_id) === branchId)];
+  }
+
+  if (norm.startsWith("INSERT INTO doctors")) {
+    const doctorId = doctors.length + 1;
+    doctors.push({ doctor_id: doctorId, branch_id: Number(params[0]), full_name: params[1] });
+    return [{ insertId: doctorId, affectedRows: 1 }];
+  }
+
+  if (norm.includes("FROM sale_items") && norm.includes("GROUP BY sale_id")) {
+    const branchId = params[0] != null ? Number(params[0]) : null;
+    const agg = new Map();
+    for (const si of sale_items) {
+      if (branchId != null && Number(si.branch_id) !== branchId) continue;
+      agg.set(Number(si.sale_id), (agg.get(Number(si.sale_id)) || 0) + Number(si.quantity || 0));
+    }
+    return [Array.from(agg.entries()).map(([sale_id, units_sold]) => ({ sale_id, units_sold }))];
   }
 
   // Default fallback

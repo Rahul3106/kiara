@@ -3119,3 +3119,299 @@ export function EditBill({ apiUrl, token, searchMedicines }) {
     </>
   );
 }
+
+export function DoctorSalesReport({ apiUrl, token, isAdmin = false, branches = [] }) {
+  const [period, setPeriod] = useState("month");
+  const [branchId, setBranchId] = useState("");
+  const [search, setSearch] = useState("");
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [expandedKey, setExpandedKey] = useState(null);
+
+  const loadReport = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({ period });
+      if (isAdmin && branchId) params.set("branchId", branchId);
+      if (search.trim()) params.set("search", search.trim());
+      const res = await fetch(`${apiUrl}/api/analytics/doctor-sales?${params.toString()}`, {
+        headers: headers(token),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Unable to load doctor-wise sales report.");
+      setReport(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [apiUrl, token, period, isAdmin, branchId, search]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      loadReport();
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [loadReport]);
+
+  const doctors = report?.doctors || [];
+  const summary = report?.summary || {
+    doctorCount: 0,
+    totalBills: 0,
+    grossBilled: 0,
+    customerReturns: 0,
+    netSales: 0,
+  };
+
+  const chartDoctors = doctors.filter((d) => !d.isWalkIn).slice(0, 8);
+  const chartCategories = chartDoctors.map((d) => d.doctorName);
+  const chartSeries = [
+    {
+      name: "Gross Billed",
+      color: "#2563eb",
+      data: chartDoctors.map((d) => Number(d.grossBilled || 0)),
+    },
+    {
+      name: "Net Sales",
+      color: "#10b981",
+      data: chartDoctors.map((d) => Number(d.netSales || 0)),
+    },
+  ];
+
+  const periodLabels = {
+    day: "Today",
+    week: "This Week",
+    month: "This Month",
+    all: "All Time",
+  };
+
+  return (
+    <>
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">REPORTS</p>
+          <h2>Doctor-wise sales report</h2>
+          <p>Prescription bills, units sold, returns, and net revenue grouped by prescribing doctor.</p>
+        </div>
+        <button type="button" className="secondary-button" onClick={loadReport} disabled={loading}>
+          {loading ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+
+      {error && <div className="error-message">{error}</div>}
+
+      <div className="billing-card">
+        <div className="doctor-report-toolbar">
+          <div className="period-toggle" style={{ margin: 0 }}>
+            {["day", "week", "month", "all"].map((p) => (
+              <button
+                key={p}
+                type="button"
+                className={period === p ? "primary-button" : "secondary-button"}
+                onClick={() => setPeriod(p)}
+                style={{ minHeight: "36px", padding: "6px 14px", fontSize: "13px" }}
+              >
+                {periodLabels[p]}
+              </button>
+            ))}
+          </div>
+
+          <div className="doctor-report-filters">
+            {isAdmin && (
+              <select
+                aria-label="Filter by branch"
+                value={branchId}
+                onChange={(e) => setBranchId(e.target.value)}
+              >
+                <option value="">All branches</option>
+                {branches
+                  .filter((b) => b.is_active)
+                  .map((b) => (
+                    <option key={b.branch_id} value={b.branch_id}>
+                      {b.branch_name} ({b.branch_code})
+                    </option>
+                  ))}
+              </select>
+            )}
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search doctor name…"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="dashboard-kpi-grid">
+        <article className="stat-card stat-card-neutral">
+          <span className="stat-card-label">Doctors ({periodLabels[period]})</span>
+          <p className="stat-card-value">{summary.doctorCount}</p>
+          <span className="stat-card-hint">Prescribing doctors with billed sales</span>
+        </article>
+        <article className="stat-card stat-card-sales">
+          <span className="stat-card-label">Total billed invoices</span>
+          <p className="stat-card-value">{summary.totalBills}</p>
+          <span className="stat-card-hint">Across matched doctor &amp; walk-in bills</span>
+        </article>
+        <article className="stat-card stat-card-purchase">
+          <span className="stat-card-label">Gross billed</span>
+          <p className="stat-card-value">₹{Number(summary.grossBilled || 0).toFixed(2)}</p>
+          <span className="stat-card-hint">Returns: − ₹{Number(summary.customerReturns || 0).toFixed(2)}</span>
+        </article>
+        <article className="stat-card stat-card-profit">
+          <span className="stat-card-label">Net sales</span>
+          <p className="stat-card-value metric-profit-positive">
+            ₹{Number(summary.netSales || 0).toFixed(2)}
+          </p>
+          <span className="stat-card-hint">Billed minus customer returns</span>
+        </article>
+      </div>
+
+      {chartDoctors.length > 0 && (
+        <div style={{ marginBottom: "22px" }}>
+          <BarChart
+            title={`Top Doctors by Sales (${periodLabels[period]})`}
+            categories={chartCategories}
+            series={chartSeries}
+          />
+        </div>
+      )}
+
+      <div className="table-card">
+        <h3>Doctor breakdown ({doctors.length})</h3>
+        {loading && !report ? (
+          <p className="empty-state">Loading doctor-wise sales…</p>
+        ) : doctors.length === 0 ? (
+          <p className="empty-state">No billed sales found for the selected filter.</p>
+        ) : (
+          <div className="table-scroll">
+            <table className="products-table">
+              <thead>
+                <tr>
+                  <th>Doctor name</th>
+                  {isAdmin && <th>Branch</th>}
+                  <th>Bills</th>
+                  <th>Patients</th>
+                  <th>Units sold</th>
+                  <th>Gross billed</th>
+                  <th>Returns</th>
+                  <th>Net sales</th>
+                  <th>Last bill</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {doctors.map((doc) => {
+                  const isOpen = expandedKey === doc.doctorKey;
+                  return (
+                    <tr key={doc.doctorKey}>
+                      <td>
+                        <strong>{doc.doctorName}</strong>
+                        {doc.isWalkIn && <small>No doctor entered on bill</small>}
+                      </td>
+                      {isAdmin && <td>{doc.branchName || "—"}</td>}
+                      <td>{doc.billCount}</td>
+                      <td>{doc.patientCount}</td>
+                      <td>{doc.unitsSold}</td>
+                      <td>₹{Number(doc.grossBilled).toFixed(2)}</td>
+                      <td>
+                        {Number(doc.customerReturns) > 0 ? (
+                          <span className="status-badge status-danger">
+                            − ₹{Number(doc.customerReturns).toFixed(2)}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td>
+                        <strong className="metric-profit-positive">
+                          ₹{Number(doc.netSales).toFixed(2)}
+                        </strong>
+                      </td>
+                      <td>
+                        {doc.lastSaleDate ? String(doc.lastSaleDate).slice(0, 10) : "—"}
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="secondary-button medicine-add-btn"
+                          onClick={() =>
+                            setExpandedKey((prev) =>
+                              prev === doc.doctorKey ? null : doc.doctorKey
+                            )
+                          }
+                        >
+                          {isOpen ? "Hide bills" : "View bills"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {expandedKey && (() => {
+          const selectedDoc = doctors.find((d) => d.doctorKey === expandedKey);
+          if (!selectedDoc) return null;
+          return (
+            <div className="doctor-bills-drawer">
+              <div className="doctor-bills-drawer-head">
+                <h4>
+                  Bills for {selectedDoc.doctorName} ({selectedDoc.bills.length})
+                </h4>
+                <button
+                  type="button"
+                  className="secondary-button medicine-add-btn"
+                  onClick={() => setExpandedKey(null)}
+                >
+                  Close
+                </button>
+              </div>
+              <div className="table-scroll">
+                <table className="products-table">
+                  <thead>
+                    <tr>
+                      <th>Invoice #</th>
+                      <th>Patient</th>
+                      {isAdmin && <th>Branch</th>}
+                      <th>Date</th>
+                      <th>Payment</th>
+                      <th>Billed</th>
+                      <th>Returns</th>
+                      <th>Net</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedDoc.bills.map((b) => (
+                      <tr key={b.sale_id}>
+                        <td><code>{b.invoice_number || `#${b.sale_id}`}</code></td>
+                        <td>{b.patientName}</td>
+                        {isAdmin && <td>{b.branch_name}</td>}
+                        <td>{String(b.sale_datetime).slice(0, 16)}</td>
+                        <td>{b.payment_method}</td>
+                        <td>₹{Number(b.gross_billed).toFixed(2)}</td>
+                        <td>
+                          {Number(b.returned_total) > 0
+                            ? `− ₹${Number(b.returned_total).toFixed(2)}`
+                            : "—"}
+                        </td>
+                        <td>
+                          <strong>₹{Number(b.net_total).toFixed(2)}</strong>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+    </>
+  );
+}

@@ -1106,6 +1106,7 @@ router.post("/", authenticateToken, requireShopUser, async (req, res) => {
       clientTransactionId,
       patientId = null,
       doctorId = null,
+      doctorName = "",
       paymentMethod = "CASH",
       notes = "",
       patientName = "",
@@ -1415,11 +1416,41 @@ router.post("/", authenticateToken, requireShopUser, async (req, res) => {
       }
     }
 
-    if (doctorId !== null) {
+    let effectiveDoctorId =
+      doctorId != null && doctorId !== "" ? Number(doctorId) : null;
+
+    const rawDoctorName =
+      typeof doctorName === "string"
+        ? doctorName.trim()
+        : (parsePatientNotes(saleNotes)?.doctorName || "").trim();
+    const trimmedDoctorName =
+      rawDoctorName && !/^(n\/a|na|self|-|—)$/i.test(rawDoctorName)
+        ? rawDoctorName.slice(0, 120)
+        : "";
+
+    if (!effectiveDoctorId && trimmedDoctorName) {
+      const [existingDoc] = await connection.execute(
+        `SELECT doctor_id FROM doctors
+         WHERE branch_id = ? AND LOWER(TRIM(full_name)) = LOWER(?)
+         LIMIT 1`,
+        [branchId, trimmedDoctorName]
+      );
+      if (existingDoc.length) {
+        effectiveDoctorId = existingDoc[0].doctor_id;
+      } else {
+        const [createdDoc] = await connection.execute(
+          `INSERT INTO doctors (branch_id, full_name) VALUES (?, ?)`,
+          [branchId, trimmedDoctorName]
+        );
+        effectiveDoctorId = createdDoc.insertId;
+      }
+    }
+
+    if (effectiveDoctorId !== null) {
       const [doctors] = await connection.execute(
         `SELECT doctor_id FROM doctors
          WHERE doctor_id = ? AND branch_id = ?`,
-        [doctorId, branchId]
+        [effectiveDoctorId, branchId]
       );
 
       if (!doctors.length) {
@@ -1471,7 +1502,7 @@ const branch = branchRows[0];
       [
         branchId,
         effectivePatientId,
-        doctorId,
+        effectiveDoctorId,
         invoiceNumber,
         clientTransactionId,
         paymentMethod,
