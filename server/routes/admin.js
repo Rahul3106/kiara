@@ -491,6 +491,30 @@ router.get("/sales", async (req, res) => {
 
     const [sales] = await pool.query(sql, params);
 
+    let retSql = `
+      SELECT
+        sale_id,
+        COUNT(*) AS return_count,
+        COALESCE(SUM(return_total), 0) AS returned_total
+      FROM customer_returns
+    `;
+    const retParams = [];
+    if (branchId != null) {
+      retSql += " WHERE branch_id = ?";
+      retParams.push(branchId);
+    }
+    retSql += " GROUP BY sale_id";
+    const [retRows] = await pool.query(retSql, retParams);
+    const retBySale = new Map(
+      retRows.map((r) => [
+        Number(r.sale_id),
+        {
+          returnCount: Number(r.return_count || 0),
+          returnedTotal: Number(r.returned_total || 0),
+        },
+      ])
+    );
+
     const enriched = sales.map((row) => {
       const notes = row.notes || "";
       const nameMatch = notes.match(/Patient:\s*([^|]+)/i);
@@ -503,6 +527,14 @@ router.get("/sales", async (req, res) => {
       const patientName =
         row.patient_full_name ||
         (nameMatch ? nameMatch[1].trim() : "Walk-in Patient");
+      const retInfo = retBySale.get(Number(row.sale_id)) || {
+        returnCount: 0,
+        returnedTotal: 0,
+      };
+      const netTotal = Math.max(
+        0,
+        Number((Number(row.grand_total || 0) - retInfo.returnedTotal).toFixed(2))
+      );
 
       return {
         ...row,
@@ -510,6 +542,12 @@ router.get("/sales", async (req, res) => {
         patientName: patientName,
         patient_mobile: row.patient_mobile_db || mobileFromNotes,
         patientMobile: row.patient_mobile_db || mobileFromNotes,
+        return_count: retInfo.returnCount,
+        returnCount: retInfo.returnCount,
+        returned_total: retInfo.returnedTotal,
+        returnedTotal: retInfo.returnedTotal,
+        net_total: netTotal,
+        netTotal,
       };
     });
 

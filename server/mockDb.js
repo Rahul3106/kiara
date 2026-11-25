@@ -231,6 +231,7 @@ const purchases = [
 ];
 
 const customer_returns = [];
+const customer_return_items = [];
 
 // Query dispatcher
 async function executeMockQuery(sql, params = []) {
@@ -359,8 +360,67 @@ async function executeMockQuery(sql, params = []) {
     return [byBranch];
   }
 
+  if (norm.includes("FROM customer_returns") && norm.includes("GROUP BY sale_id")) {
+    const branchId = params[0] != null ? Number(params[0]) : null;
+    const map = new Map();
+    for (const cr of customer_returns) {
+      if (branchId != null && Number(cr.branch_id) !== branchId) continue;
+      const cur = map.get(Number(cr.sale_id)) || {
+        sale_id: cr.sale_id,
+        return_count: 0,
+        returned_total: 0,
+      };
+      cur.return_count += 1;
+      cur.returned_total += Number(cr.return_total || 0);
+      map.set(Number(cr.sale_id), cur);
+    }
+    return [Array.from(map.values())];
+  }
+
+  if (norm.includes("FROM customer_returns cr") && norm.includes("WHERE cr.sale_id = ?")) {
+    const saleId = Number(params[0]);
+    const branchId = Number(params[1]);
+    return [
+      customer_returns.filter(
+        (cr) => Number(cr.sale_id) === saleId && Number(cr.branch_id) === branchId
+      ),
+    ];
+  }
+
+  if (norm.includes("FROM customer_return_items cri") && norm.includes("WHERE si.sale_id = ?")) {
+    const saleId = Number(params[0]);
+    const branchId = Number(params[1]);
+    const saleItemsForSale = new Map(
+      sale_items
+        .filter((si) => Number(si.sale_id) === saleId && Number(si.branch_id) === branchId)
+        .map((si) => [Number(si.sale_item_id), si])
+    );
+    return [
+      customer_return_items
+        .filter((cri) => saleItemsForSale.has(Number(cri.sale_item_id)))
+        .map((cri) => {
+          const si = saleItemsForSale.get(Number(cri.sale_item_id));
+          return {
+            ...cri,
+            product_name_snapshot: si?.product_name_snapshot || "Medicine",
+            batch_number_snapshot: si?.batch_number_snapshot || "",
+          };
+        }),
+    ];
+  }
+
   if (norm.includes("FROM customer_returns") && norm.includes("GROUP BY branch_id")) {
-    return [[]];
+    const map = new Map();
+    for (const cr of customer_returns) {
+      const bId = Number(cr.branch_id);
+      map.set(bId, (map.get(bId) || 0) + Number(cr.return_total || 0));
+    }
+    return [
+      Array.from(map.entries()).map(([branch_id, customer_returns]) => ({
+        branch_id,
+        customer_returns,
+      })),
+    ];
   }
 
   // 11. Admin sales list (with patient join and search)
@@ -719,6 +779,72 @@ async function executeMockQuery(sql, params = []) {
     };
     users.push(newUser);
     return [{ insertId: userId, affectedRows: 1 }];
+  }
+
+  // 22. Customer returns lookup & creation
+  if (norm.includes("FROM customer_return_items") && norm.includes("GROUP BY cri.sale_item_id")) {
+    const saleId = Number(params[0]);
+    const branchId = Number(params[1]);
+    const itemIds = new Set(
+      sale_items.filter((si) => Number(si.sale_id) === saleId && Number(si.branch_id) === branchId).map((si) => Number(si.sale_item_id))
+    );
+    const agg = new Map();
+    for (const cri of customer_return_items) {
+      if (!itemIds.has(Number(cri.sale_item_id))) continue;
+      agg.set(Number(cri.sale_item_id), (agg.get(Number(cri.sale_item_id)) || 0) + Number(cri.quantity || 0));
+    }
+    return [Array.from(agg.entries()).map(([sale_item_id, returned_qty]) => ({ sale_item_id, returned_qty }))];
+  }
+
+  if (norm.includes("FROM customer_return_items") && norm.includes("WHERE sale_item_id = ?")) {
+    const saleItemId = Number(params[0]);
+    const branchId = Number(params[1]);
+    const returned_qty = customer_return_items
+      .filter((cri) => Number(cri.sale_item_id) === saleItemId && Number(cri.branch_id) === branchId)
+      .reduce((s, cri) => s + Number(cri.quantity || 0), 0);
+    return [[{ returned_qty }]];
+  }
+
+  if (norm.includes("FROM sale_items") && norm.includes("WHERE sale_item_id = ?")) {
+    const saleItemId = Number(params[0]);
+    const saleId = Number(params[1]);
+    const branchId = Number(params[2]);
+    return [sale_items.filter((si) => Number(si.sale_item_id) === saleItemId && Number(si.sale_id) === saleId && Number(si.branch_id) === branchId)];
+  }
+
+  if (norm.startsWith("INSERT INTO customer_returns")) {
+    const id = customer_returns.length + 1;
+    customer_returns.push({
+      customer_return_id: id,
+      branch_id: Number(params[0]),
+      sale_id: Number(params[1]),
+      return_datetime: new Date(),
+      credit_note_number: params[2],
+      return_total: 0,
+      client_transaction_id: params[3],
+      notes: params[4],
+    });
+    return [{ insertId: id, affectedRows: 1 }];
+  }
+
+  if (norm.startsWith("UPDATE customer_returns SET return_total = ?")) {
+    const cr = customer_returns.find((r) => Number(r.customer_return_id) === Number(params[1]));
+    if (cr) cr.return_total = Number(params[0]);
+    return [{ affectedRows: cr ? 1 : 0 }];
+  }
+
+  if (norm.startsWith("INSERT INTO customer_return_items")) {
+    const id = customer_return_items.length + 1;
+    customer_return_items.push({
+      customer_return_item_id: id,
+      customer_return_id: Number(params[0]),
+      branch_id: Number(params[1]),
+      sale_item_id: Number(params[2]),
+      batch_id: Number(params[3]),
+      quantity: Number(params[4]),
+      refund_amount: Number(params[5]),
+    });
+    return [{ insertId: id, affectedRows: 1 }];
   }
 
   // Default fallback

@@ -1551,40 +1551,61 @@ export function PastBills({ apiUrl, token }) {
                   <th>Mobile</th>
                   <th>Invoice #</th>
                   <th>Date</th>
-                  <th>Total</th>
+                  <th>Billed</th>
+                  <th>Returns</th>
+                  <th>Net</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {sales.map((row) => (
-                  <tr
-                    key={row.sale_id}
-                    className={
-                      selectedId === row.sale_id ? "past-bill-row-active" : ""
-                    }
-                  >
-                    <td>
-                      <strong>{row.patientName || row.patient_name || "Walk-in Patient"}</strong>
-                    </td>
-                    <td>{row.patientMobile || row.patient_mobile || "—"}</td>
-                    <td>
-                      <code>{row.invoice_number || `#${row.sale_id}`}</code>
-                    </td>
-                    <td>{String(row.sale_datetime).slice(0, 16)}</td>
-                    <td>
-                      <strong>₹{Number(row.grand_total).toFixed(2)}</strong>
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="secondary-button medicine-add-btn"
-                        onClick={() => openBill(row.sale_id)}
-                      >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {sales.map((row) => {
+                  const retTotal = Number(row.returnedTotal ?? row.returned_total ?? 0);
+                  const retCount = Number(row.returnCount ?? row.return_count ?? 0);
+                  const netTotal = Number(
+                    row.netTotal ?? row.net_total ?? Math.max(0, Number(row.grand_total) - retTotal)
+                  );
+                  return (
+                    <tr
+                      key={row.sale_id}
+                      className={
+                        selectedId === row.sale_id ? "past-bill-row-active" : ""
+                      }
+                    >
+                      <td>
+                        <strong>{row.patientName || row.patient_name || "Walk-in Patient"}</strong>
+                      </td>
+                      <td>{row.patientMobile || row.patient_mobile || "—"}</td>
+                      <td>
+                        <code>{row.invoice_number || `#${row.sale_id}`}</code>
+                      </td>
+                      <td>{String(row.sale_datetime).slice(0, 16)}</td>
+                      <td>
+                        <strong>₹{Number(row.grand_total).toFixed(2)}</strong>
+                      </td>
+                      <td>
+                        {retTotal > 0 ? (
+                          <span className="status-badge status-danger">
+                            −₹{retTotal.toFixed(2)} ({retCount})
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td>
+                        <strong>₹{netTotal.toFixed(2)}</strong>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="secondary-button medicine-add-btn"
+                          onClick={() => openBill(row.sale_id)}
+                        >
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1618,14 +1639,40 @@ export function PastBills({ apiUrl, token }) {
           {detailLoading && <p className="billing-search-hint no-print">Loading…</p>}
           {detail?.sale && (
             <>
-              <p className="no-print">
-                <strong>{detail.sale.invoice_number}</strong> ·{" "}
-                {String(detail.sale.sale_datetime).slice(0, 19)} ·{" "}
-                {detail.sale.payment_method}
-              </p>
-              {detail.sale.notes && (
-                <p className="past-bill-notes no-print">{detail.sale.notes}</p>
-              )}
+              <div className="notice-card bill-summary-banner no-print">
+                <div>
+                  <strong>{detail.sale.invoice_number || `Bill #${detail.sale.sale_id}`}</strong>
+                  <p>
+                    Patient:{" "}
+                    <strong>{detail.sale.patientName || "Walk-in Patient"}</strong>
+                    {detail.sale.patientMobile ? ` · ${detail.sale.patientMobile}` : ""} ·{" "}
+                    {String(detail.sale.sale_datetime).slice(0, 19)} ·{" "}
+                    {detail.sale.payment_method}
+                  </p>
+                  {detail.sale.notes && (
+                    <p className="past-bill-notes">{detail.sale.notes}</p>
+                  )}
+                </div>
+                <div className="bill-summary-total">
+                  <span>
+                    Billed: ₹{Number(detail.sale.grand_total).toFixed(2)}
+                    {Number(detail.sale.returnedTotal || 0) > 0
+                      ? ` · Returned: −₹${Number(detail.sale.returnedTotal).toFixed(2)}`
+                      : ""}
+                  </span>
+                  <strong>
+                    Net: ₹
+                    {Number(
+                      detail.sale.netTotal ??
+                        Math.max(
+                          0,
+                          Number(detail.sale.grand_total) -
+                            Number(detail.sale.returnedTotal || 0)
+                        )
+                    ).toFixed(2)}
+                  </strong>
+                </div>
+              </div>
 
               {showInvoiceSheet ? (
                 (() => {
@@ -1805,35 +1852,142 @@ export function PastBills({ apiUrl, token }) {
                       <div className="gst-footer-tagline">
                         Get well soon. Scan the Healthcare QR Code for complete health services, insurance, and government benefits.
                       </div>
+
+                      {(detail.returns || []).length > 0 && (
+                        <div className="gst-returns-note">
+                          <strong>Customer Returns Recorded:</strong>{" "}
+                          {(detail.returns || [])
+                            .map(
+                              (r) =>
+                                `${r.credit_note_number} (−₹${Number(r.return_total).toFixed(2)})`
+                            )
+                            .join(", ")}{" "}
+                          · Net after returns: ₹
+                          {Number(
+                            detail.sale.netTotal ??
+                              Math.max(0, grandTotal - Number(detail.sale.returnedTotal || 0))
+                          ).toFixed(2)}
+                        </div>
+                      )}
                     </div>
                   );
                 })()
               ) : (
-                <div className="table-scroll">
-                  <table className="products-table">
-                    <thead>
-                      <tr>
-                        <th>Medicine</th>
-                        <th>Batch</th>
-                        <th>Qty</th>
-                        <th>Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(detail.items || []).map((line) => (
-                        <tr key={line.sale_item_id}>
-                          <td>{line.product_name_snapshot}</td>
-                          <td>{line.batch_number_snapshot}</td>
-                          <td>{line.quantity}</td>
-                          <td>₹{Number(line.line_total).toFixed(2)}</td>
+                <>
+                  <div className="table-scroll">
+                    <table className="products-table">
+                      <thead>
+                        <tr>
+                          <th>Medicine</th>
+                          <th>Batch</th>
+                          <th>Sold</th>
+                          <th>Returned</th>
+                          <th>Net qty</th>
+                          <th>Amount</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <p className="invoice-total">
-                    Grand total: ₹{Number(detail.sale.grand_total).toFixed(2)}
-                  </p>
-                </div>
+                      </thead>
+                      <tbody>
+                        {(detail.items || []).map((line) => {
+                          const soldQty = Number(line.quantity || 0);
+                          const retQty = Number(line.already_returned_qty || 0);
+                          const netQty = Math.max(0, soldQty - retQty);
+                          return (
+                            <tr key={line.sale_item_id}>
+                              <td>{line.product_name_snapshot}</td>
+                              <td>{line.batch_number_snapshot}</td>
+                              <td>{soldQty}</td>
+                              <td>
+                                {retQty > 0 ? (
+                                  <span className="status-badge status-danger">
+                                    −{retQty}
+                                  </span>
+                                ) : (
+                                  "0"
+                                )}
+                              </td>
+                              <td>{netQty}</td>
+                              <td>₹{Number(line.line_total).toFixed(2)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <div className="checkout-total supplier-return-total">
+                      <span>
+                        Billed ₹{Number(detail.sale.grand_total).toFixed(2)}
+                        {Number(detail.sale.returnedTotal || 0) > 0
+                          ? ` · Returned −₹${Number(detail.sale.returnedTotal).toFixed(2)}`
+                          : ""}
+                      </span>
+                      <strong>
+                        Net total: ₹
+                        {Number(
+                          detail.sale.netTotal ??
+                            Math.max(
+                              0,
+                              Number(detail.sale.grand_total) -
+                                Number(detail.sale.returnedTotal || 0)
+                            )
+                        ).toFixed(2)}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div className="bill-returns-section">
+                    <h4>
+                      Customer returns for this bill ({(detail.returns || []).length})
+                    </h4>
+                    {!(detail.returns || []).length ? (
+                      <p className="empty-state">
+                        No customer returns recorded for this bill.
+                      </p>
+                    ) : (
+                      <div className="bill-returns-list">
+                        {(detail.returns || []).map((ret) => (
+                          <div
+                            key={ret.customer_return_id}
+                            className="bill-return-card"
+                          >
+                            <div className="bill-return-card-head">
+                              <div>
+                                <strong>{ret.credit_note_number}</strong>
+                                <span className="billing-search-hint" style={{ marginLeft: "10px" }}>
+                                  {String(ret.return_datetime).slice(0, 19)}
+                                  {ret.notes ? ` · ${ret.notes}` : ""}
+                                </span>
+                              </div>
+                              <span className="status-badge status-danger">
+                                Refunded: −₹{Number(ret.return_total).toFixed(2)}
+                              </span>
+                            </div>
+                            {(ret.items || []).length > 0 && (
+                              <table className="products-table">
+                                <thead>
+                                  <tr>
+                                    <th>Returned medicine</th>
+                                    <th>Batch</th>
+                                    <th>Qty returned</th>
+                                    <th>Refund ₹</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {ret.items.map((ri) => (
+                                    <tr key={ri.customer_return_item_id}>
+                                      <td>{ri.product_name_snapshot}</td>
+                                      <td>{ri.batch_number_snapshot || "—"}</td>
+                                      <td>{ri.quantity}</td>
+                                      <td>−₹{Number(ri.refund_amount).toFixed(2)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </>
           )}

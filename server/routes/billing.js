@@ -332,6 +332,26 @@ router.get("/history", authenticateToken, requireShopUser, async (req, res) => {
 
     const [sales] = await pool.execute(sql, params);
 
+    const [returnAgg] = await pool.execute(
+      `SELECT
+         sale_id,
+         COUNT(*) AS return_count,
+         COALESCE(SUM(return_total), 0) AS returned_total
+       FROM customer_returns
+       WHERE branch_id = ?
+       GROUP BY sale_id`,
+      [branchId]
+    );
+    const returnsBySale = new Map(
+      returnAgg.map((r) => [
+        Number(r.sale_id),
+        {
+          returnCount: Number(r.return_count || 0),
+          returnedTotal: Number(r.returned_total || 0),
+        },
+      ])
+    );
+
     const enriched = sales.map((row) => {
       const notes = row.notes || "";
       const nameMatch = notes.match(/Patient:\s*([^|]+)/i);
@@ -340,12 +360,27 @@ router.get("/history", authenticateToken, requireShopUser, async (req, res) => {
         mobileMatch && mobileMatch[1].trim() !== "N/A"
           ? mobileMatch[1].trim()
           : null;
+      const retInfo = returnsBySale.get(Number(row.sale_id)) || {
+        returnCount: 0,
+        returnedTotal: 0,
+      };
+      const grandTotal = Number(row.grand_total || 0);
+      const netTotal = Math.max(
+        0,
+        Number((grandTotal - retInfo.returnedTotal).toFixed(2))
+      );
 
       return {
         sale_id: row.sale_id,
         invoice_number: row.invoice_number,
         sale_type: row.sale_type,
         grand_total: row.grand_total,
+        returned_total: retInfo.returnedTotal,
+        returnedTotal: retInfo.returnedTotal,
+        return_count: retInfo.returnCount,
+        returnCount: retInfo.returnCount,
+        net_total: netTotal,
+        netTotal,
         subtotal: row.subtotal,
         discount_total: row.discount_total,
         sale_datetime: row.sale_datetime,
@@ -503,14 +538,69 @@ router.get("/:saleId", authenticateToken, requireShopUser, async (req, res) => {
       };
     });
 
+    const [customerReturns] = await pool.execute(
+      `SELECT
+         cr.customer_return_id,
+         cr.return_datetime,
+         cr.credit_note_number,
+         cr.return_total,
+         cr.notes
+       FROM customer_returns cr
+       WHERE cr.sale_id = ? AND cr.branch_id = ?
+       ORDER BY cr.return_datetime DESC`,
+      [saleId, branchId]
+    );
+
+    const [customerReturnItems] = await pool.execute(
+      `SELECT
+         cri.customer_return_item_id,
+         cri.customer_return_id,
+         cri.sale_item_id,
+         cri.batch_id,
+         cri.quantity,
+         cri.refund_amount,
+         si.product_name_snapshot,
+         si.batch_number_snapshot
+       FROM customer_return_items cri
+       INNER JOIN sale_items si
+         ON si.sale_item_id = cri.sale_item_id
+        AND si.branch_id = cri.branch_id
+       WHERE si.sale_id = ? AND cri.branch_id = ?
+       ORDER BY cri.customer_return_item_id ASC`,
+      [saleId, branchId]
+    );
+
+    const itemsByReturnId = new Map();
+    for (const rItem of customerReturnItems) {
+      const rId = Number(rItem.customer_return_id);
+      if (!itemsByReturnId.has(rId)) itemsByReturnId.set(rId, []);
+      itemsByReturnId.get(rId).push(rItem);
+    }
+
+    const returns = customerReturns.map((cr) => ({
+      ...cr,
+      items: itemsByReturnId.get(Number(cr.customer_return_id)) || [],
+    }));
+
+    const returnedTotal = Number(
+      returns.reduce((sum, r) => sum + Number(r.return_total || 0), 0).toFixed(2)
+    );
+    const netTotal = Math.max(
+      0,
+      Number((Number(saleRow.grand_total || 0) - returnedTotal).toFixed(2))
+    );
+
     res.json({
       success: true,
       sale: {
         ...saleRow,
         patientName,
         patientMobile,
+        returnedTotal,
+        netTotal,
       },
       items: enrichedItems,
+      returns,
     });
   } catch (error) {
     console.error("Get bill error:", error.message);

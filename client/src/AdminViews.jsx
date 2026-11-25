@@ -396,31 +396,52 @@ export function AdminBranchSales({ apiUrl, token, branch, onBack }) {
                   <th>Invoice #</th>
                   <th>Type</th>
                   <th>Payment</th>
-                  <th>Amount</th>
+                  <th>Billed</th>
+                  <th>Returns</th>
+                  <th>Net</th>
                 </tr>
               </thead>
               <tbody>
-                {sales.map((sale) => (
-                  <tr key={sale.sale_id}>
-                    <td>
-                      {sale.sale_datetime
-                        ? String(sale.sale_datetime).slice(0, 16)
-                        : "—"}
-                    </td>
-                    <td>
-                      <strong>{sale.patientName || sale.patient_name || "Walk-in Patient"}</strong>
-                      {(sale.patientMobile || sale.patient_mobile) && (
-                        <div style={{ fontSize: "12px", color: "#64748b" }}>
-                          {sale.patientMobile || sale.patient_mobile}
-                        </div>
-                      )}
-                    </td>
-                    <td>{sale.invoice_number || `#${sale.sale_id}`}</td>
-                    <td>{sale.sale_type}</td>
-                    <td>{sale.payment_method}</td>
-                    <td>₹{Number(sale.grand_total).toFixed(2)}</td>
-                  </tr>
-                ))}
+                {sales.map((sale) => {
+                  const retTotal = Number(sale.returnedTotal ?? sale.returned_total ?? 0);
+                  const retCount = Number(sale.returnCount ?? sale.return_count ?? 0);
+                  const netTotal = Number(
+                    sale.netTotal ?? sale.net_total ?? Math.max(0, Number(sale.grand_total) - retTotal)
+                  );
+                  return (
+                    <tr key={sale.sale_id}>
+                      <td>
+                        {sale.sale_datetime
+                          ? String(sale.sale_datetime).slice(0, 16)
+                          : "—"}
+                      </td>
+                      <td>
+                        <strong>{sale.patientName || sale.patient_name || "Walk-in Patient"}</strong>
+                        {(sale.patientMobile || sale.patient_mobile) && (
+                          <div style={{ fontSize: "12px", color: "#64748b" }}>
+                            {sale.patientMobile || sale.patient_mobile}
+                          </div>
+                        )}
+                      </td>
+                      <td>{sale.invoice_number || `#${sale.sale_id}`}</td>
+                      <td>{sale.sale_type}</td>
+                      <td>{sale.payment_method}</td>
+                      <td>₹{Number(sale.grand_total).toFixed(2)}</td>
+                      <td>
+                        {retTotal > 0 ? (
+                          <span className="status-badge status-danger">
+                            −₹{retTotal.toFixed(2)} ({retCount})
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td>
+                        <strong>₹{netTotal.toFixed(2)}</strong>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

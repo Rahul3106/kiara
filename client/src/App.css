@@ -3574,6 +3574,48 @@ button.branch-tile-button:hover:not(:disabled) {
   color: #b91c1c;
 }
 
+.bill-returns-section {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.bill-returns-section h4 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: #1e293b;
+}
+
+.bill-returns-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bill-return-card {
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 14px;
+  background: #fffafa;
+}
+
+.bill-return-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.gst-returns-note {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 1px dashed #b91c1c;
+  font-size: 10.5px;
+  color: #7f1d1d;
+}
+
 @media (max-width: 640px) {
   .bill-summary-total {
     align-items: flex-start;
