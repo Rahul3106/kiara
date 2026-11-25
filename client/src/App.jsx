@@ -123,6 +123,13 @@ function App() {
   const [inventorySearch, setInventorySearch] = useState("");
   const [loadingInventory, setLoadingInventory] = useState(false);
   const [inventoryError, setInventoryError] = useState("");
+  const [racks, setRacks] = useState([]);
+  const [openRackMenuBatchId, setOpenRackMenuBatchId] = useState(null);
+  const [rackModalItem, setRackModalItem] = useState(null);
+  const [rackSelection, setRackSelection] = useState("");
+  const [newRackCode, setNewRackCode] = useState("");
+  const [savingRack, setSavingRack] = useState(false);
+  const [rackNotice, setRackNotice] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [session, setSession] = useState(() => readStoredSession());
@@ -280,6 +287,63 @@ async function loadInventory(searchTerm = "", branchFilter = "") {
     );
   } finally {
     setLoadingInventory(false);
+  }
+}
+
+async function loadRacks() {
+  if (!session?.token || session.user.role === "ADMIN") return;
+  try {
+    const response = await fetch(`${API_URL}/api/inventory/racks`, {
+      headers: { Authorization: `Bearer ${session.token}` },
+    });
+    const data = await response.json();
+    if (response.ok) {
+      setRacks(data.racks || []);
+    }
+  } catch {
+    /* racks list optional */
+  }
+}
+
+function openChangeRackModal(item) {
+  setOpenRackMenuBatchId(null);
+  setRackModalItem(item);
+  setRackSelection(item.rack_id ? String(item.rack_id) : "");
+  setNewRackCode("");
+  setInventoryError("");
+}
+
+async function handleSaveRack(event) {
+  event.preventDefault();
+  if (!rackModalItem || savingRack) return;
+
+  setSavingRack(true);
+  setInventoryError("");
+  setRackNotice("");
+  try {
+    const response = await fetch(`${API_URL}/api/inventory/rack`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.token}`,
+      },
+      body: JSON.stringify({
+        productId: Number(rackModalItem.product_id),
+        rackId: newRackCode.trim() ? null : rackSelection ? Number(rackSelection) : null,
+        rackCode: newRackCode.trim().toUpperCase(),
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || "Unable to update rack.");
+    }
+    setRackNotice(data.message || "Rack updated.");
+    setRackModalItem(null);
+    await Promise.all([loadInventory(inventorySearch), loadRacks()]);
+  } catch (err) {
+    setInventoryError(err.message);
+  } finally {
+    setSavingRack(false);
   }
 }
 
@@ -479,8 +543,16 @@ const finalTotal = Math.max(
 
     if (currentPath === "/inventory" && session.user.role !== "ADMIN") {
       loadInventory(inventorySearch);
+      loadRacks();
     }
   }, [session, currentPath]);
+
+  useEffect(() => {
+    if (openRackMenuBatchId == null) return undefined;
+    const closeMenu = () => setOpenRackMenuBatchId(null);
+    window.addEventListener("click", closeMenu);
+    return () => window.removeEventListener("click", closeMenu);
+  }, [openRackMenuBatchId]);
 
   useEffect(() => {
     document.body.style.overflow = mobileNavOpen ? "hidden" : "";
@@ -1423,6 +1495,12 @@ function printInvoice() {
         </div>
       )}
 
+      {rackNotice && (
+        <div className="notice-card" style={{ marginBottom: "16px" }}>
+          {rackNotice}
+        </div>
+      )}
+
       <div className="dashboard-grid">
         <article className="info-card">
           <span className="card-label">Batch records</span>
@@ -1495,6 +1573,7 @@ function printInvoice() {
                   <th>MRP</th>
                   <th>Selling Price</th>
                   <th>Status</th>
+                  <th className="row-actions-col" aria-label="Actions"></th>
                 </tr>
               </thead>
 
@@ -1514,7 +1593,12 @@ function printInvoice() {
                         : "—"}
                     </td>
                     <td>{item.rack_code || "Not assigned"}</td>
-                    <td>{item.quantity}</td>
+                    <td>
+                      {item.quantity}
+                      {Number(item.loose_quantity || 0) > 0
+                        ? ` (+${item.loose_quantity} loose)`
+                        : ""}
+                    </td>
                     <td>₹{Number(item.mrp).toFixed(2)}</td>
                     <td>
                       ₹{Number(item.selling_price).toFixed(2)}
@@ -1534,6 +1618,38 @@ function printInvoice() {
                         </span>
                       )}
                     </td>
+                    <td
+                      className="row-actions-cell"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        className="row-menu-btn"
+                        aria-label={`Actions for ${item.product_name}`}
+                        aria-expanded={openRackMenuBatchId === item.batch_id}
+                        aria-haspopup="menu"
+                        title="Medicine actions"
+                        onClick={() =>
+                          setOpenRackMenuBatchId((prev) =>
+                            prev === item.batch_id ? null : item.batch_id
+                          )
+                        }
+                      >
+                        ⋮
+                      </button>
+                      {openRackMenuBatchId === item.batch_id && (
+                        <div className="row-dropdown-menu" role="menu">
+                          <button
+                            type="button"
+                            className="row-dropdown-item"
+                            role="menuitem"
+                            onClick={() => openChangeRackModal(item)}
+                          >
+                            Change rack
+                          </button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1541,6 +1657,75 @@ function printInvoice() {
           </div>
         )}
       </div>
+
+      {rackModalItem && (
+        <div
+          className="app-modal-overlay"
+          role="presentation"
+          onClick={() => !savingRack && setRackModalItem(null)}
+        >
+          <div
+            className="app-modal rack-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="change-rack-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="change-rack-title">Change rack</h3>
+            <p>
+              <strong>{rackModalItem.product_name}</strong> · Current rack:{" "}
+              <strong>{rackModalItem.rack_code || "Not assigned"}</strong>
+            </p>
+            <form onSubmit={handleSaveRack} className="rack-modal-form">
+              <label>
+                Select existing rack
+                <select
+                  value={rackSelection}
+                  onChange={(e) => {
+                    setRackSelection(e.target.value);
+                    if (e.target.value) setNewRackCode("");
+                  }}
+                >
+                  <option value="">Not assigned</option>
+                  {racks.map((r) => (
+                    <option key={r.rack_id} value={r.rack_id}>
+                      {r.rack_code}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Or create / enter new rack code
+                <input
+                  value={newRackCode}
+                  maxLength={20}
+                  onChange={(e) =>
+                    setNewRackCode(e.target.value.toUpperCase())
+                  }
+                  placeholder="e.g. C1 or SHELF-2 (optional)"
+                />
+              </label>
+              <div className="form-actions-row">
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={savingRack}
+                >
+                  {savingRack ? "Saving…" : "Save rack"}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={savingRack}
+                  onClick={() => setRackModalItem(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 

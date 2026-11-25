@@ -3664,6 +3664,104 @@ button.branch-tile-button:hover:not(:disabled) {
   white-space: nowrap;
 }
 
+/* Inventory 3-dots rack menu & modal */
+.row-actions-col {
+  width: 44px;
+  text-align: right;
+}
+
+.row-actions-cell {
+  position: relative;
+  text-align: right;
+  width: 44px;
+}
+
+.row-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #475569;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.row-menu-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.row-dropdown-menu {
+  position: absolute;
+  right: 40px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 40;
+  min-width: 140px;
+  padding: 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+}
+
+.row-dropdown-item {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.row-dropdown-item:hover {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.rack-modal {
+  text-align: left;
+  max-width: 420px;
+}
+
+.rack-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.rack-modal-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.rack-modal-form input,
+.rack-modal-form select {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font: inherit;
+  background: #fff;
+  box-sizing: border-box;
+}
+
 @media (max-width: 640px) {
   .bill-summary-total {
     align-items: flex-start;

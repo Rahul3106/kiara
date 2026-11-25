@@ -3,8 +3,138 @@ const express = require("express");
 const pool = require("../db");
 const { authenticateToken } = require("../middleware/auth");
 const { requireShopUser } = require("../middleware/requireShopUser");
+const { resolveBranchId } = require("../lib/stockHelpers");
 
 const router = express.Router();
+
+// List racks configured for the current branch
+router.get("/racks", authenticateToken, async (req, res) => {
+  try {
+    const branchId = resolveBranchId(req.user, req.query.branchId);
+    if (!branchId) {
+      return res.status(400).json({
+        success: false,
+        message: "Branch context is required to list racks.",
+      });
+    }
+
+    const [racks] = await pool.execute(
+      `SELECT rack_id, rack_code
+       FROM racks
+       WHERE branch_id = ?
+       ORDER BY rack_code ASC`,
+      [branchId]
+    );
+
+    res.json({ success: true, racks });
+  } catch (error) {
+    console.error("List racks error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Unable to list branch racks.",
+    });
+  }
+});
+
+// Change or assign the rack for a medicine in the current branch
+router.put("/rack", authenticateToken, requireShopUser, async (req, res) => {
+  try {
+    const branchId = resolveBranchId(req.user);
+    const { productId, rackId = null, rackCode = "" } = req.body || {};
+    const parsedProductId = Number(productId);
+
+    if (!Number.isSafeInteger(parsedProductId) || parsedProductId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid productId is required.",
+      });
+    }
+
+    const [prodRows] = await pool.execute(
+      `SELECT product_id, product_name FROM products WHERE product_id = ? LIMIT 1`,
+      [parsedProductId]
+    );
+    if (!prodRows.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Medicine not found.",
+      });
+    }
+
+    let finalRackId = null;
+    let finalRackCode = null;
+    const trimmedCode = typeof rackCode === "string" ? rackCode.trim().toUpperCase() : "";
+
+    if (trimmedCode) {
+      if (trimmedCode.length > 20) {
+        return res.status(400).json({
+          success: false,
+          message: "Rack code must be 20 characters or fewer.",
+        });
+      }
+
+      const [existingRack] = await pool.execute(
+        `SELECT rack_id, rack_code FROM racks WHERE branch_id = ? AND UPPER(rack_code) = ? LIMIT 1`,
+        [branchId, trimmedCode]
+      );
+
+      if (existingRack.length) {
+        finalRackId = existingRack[0].rack_id;
+        finalRackCode = existingRack[0].rack_code;
+      } else {
+        const [insRack] = await pool.execute(
+          `INSERT INTO racks (branch_id, rack_code) VALUES (?, ?)`,
+          [branchId, trimmedCode]
+        );
+        finalRackId = insRack.insertId;
+        finalRackCode = trimmedCode;
+      }
+    } else if (rackId != null && rackId !== "") {
+      const parsedRackId = Number(rackId);
+      if (!Number.isSafeInteger(parsedRackId) || parsedRackId <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid rackId.",
+        });
+      }
+      const [rackRows] = await pool.execute(
+        `SELECT rack_id, rack_code FROM racks WHERE rack_id = ? AND branch_id = ? LIMIT 1`,
+        [parsedRackId, branchId]
+      );
+      if (!rackRows.length) {
+        return res.status(404).json({
+          success: false,
+          message: "Selected rack not found for this branch.",
+        });
+      }
+      finalRackId = rackRows[0].rack_id;
+      finalRackCode = rackRows[0].rack_code;
+    }
+
+    await pool.execute(
+      `INSERT INTO branch_products (branch_id, product_id, rack_id, low_stock_threshold)
+       VALUES (?, ?, ?, 10)
+       ON DUPLICATE KEY UPDATE rack_id = VALUES(rack_id)`,
+      [branchId, parsedProductId, finalRackId]
+    );
+
+    res.json({
+      success: true,
+      productId: parsedProductId,
+      rackId: finalRackId,
+      rackCode: finalRackCode,
+      message: finalRackCode
+        ? `${prodRows[0].product_name} moved to rack ${finalRackCode}.`
+        : `Rack cleared for ${prodRows[0].product_name}.`,
+    });
+  } catch (error) {
+    console.error("Update rack error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Unable to update medicine rack.",
+    });
+  }
+});
 
 // Must be registered before GET "/" — supplier return batch search (includes expired stock).
 router.get(
@@ -124,6 +254,7 @@ router.get("/", authenticateToken, async (req, res) => {
         i.selling_price,
         CASE
           WHEN ba.expiry_date IS NOT NULL
+            AND ba.expiry_date >= CURDATE()
             AND ba.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)
           THEN TRUE
           ELSE FALSE
@@ -131,13 +262,17 @@ router.get("/", authenticateToken, async (req, res) => {
         CASE
           WHEN (
             SELECT SUM(
-              inv.quantity * COALESCE(p2.units_per_stock_unit, 1) + inv.loose_quantity
+              CASE
+                WHEN b2.expiry_date IS NULL OR b2.expiry_date >= CURDATE()
+                THEN inv.quantity * COALESCE(p2.units_per_stock_unit, 1) + inv.loose_quantity
+                ELSE 0
+              END
             )
             FROM inventory inv
             JOIN batches b2 ON b2.batch_id = inv.batch_id AND b2.branch_id = inv.branch_id
             JOIN products p2 ON p2.product_id = b2.product_id
             WHERE inv.branch_id = i.branch_id AND b2.product_id = ba.product_id
-          ) <= 10
+          ) <= COALESCE(bp.low_stock_threshold, 10)
           THEN TRUE
           ELSE FALSE
         END AS low_stock_alert

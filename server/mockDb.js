@@ -232,6 +232,20 @@ const purchases = [
 
 const customer_returns = [];
 const customer_return_items = [];
+const racks = [
+  { rack_id: 1, branch_id: 1, rack_code: "A1" },
+  { rack_id: 2, branch_id: 1, rack_code: "A2" },
+  { rack_id: 3, branch_id: 1, rack_code: "B1" },
+  { rack_id: 4, branch_id: 2, rack_code: "A1" },
+  { rack_id: 5, branch_id: 2, rack_code: "B1" },
+  { rack_id: 6, branch_id: 3, rack_code: "A1" },
+];
+const branchProductRacks = new Map([
+  ["1:1", 1],
+  ["1:2", 2],
+  ["1:3", 3],
+  ["1:4", 1],
+]);
 
 // Query dispatcher
 async function executeMockQuery(sql, params = []) {
@@ -601,6 +615,10 @@ async function executeMockQuery(sql, params = []) {
       if (!b) continue;
       const p = products.find((pr) => pr.product_id === b.product_id);
       if (!p) continue;
+      const assignedRackId = branchProductRacks.get(`${Number(inv.branch_id)}:${Number(p.product_id)}`) || null;
+      const assignedRack = assignedRackId
+        ? racks.find((rk) => Number(rk.rack_id) === Number(assignedRackId))
+        : null;
       res.push({
         inventory_id: inv.inventory_id,
         branch_id: inv.branch_id,
@@ -611,6 +629,8 @@ async function executeMockQuery(sql, params = []) {
         strength: p.strength,
         dosage_form: p.dosage_form,
         packaging: p.packaging,
+        rack_id: assignedRack?.rack_id || null,
+        rack_code: assignedRack?.rack_code || null,
         batch_number: b.batch_number,
         expiry_date: b.expiry_date,
         quantity: inv.quantity,
@@ -860,6 +880,36 @@ async function executeMockQuery(sql, params = []) {
       refund_amount: Number(params[5]),
     });
     return [{ insertId: id, affectedRows: 1 }];
+  }
+
+  // 23. Branch racks & rack assignment
+  if (norm.includes("FROM racks WHERE branch_id = ?") && norm.includes("UPPER(rack_code) = ?")) {
+    const branchId = Number(params[0]);
+    const code = String(params[1] || "").toUpperCase();
+    return [racks.filter((r) => Number(r.branch_id) === branchId && r.rack_code.toUpperCase() === code)];
+  }
+
+  if (norm.includes("FROM racks WHERE rack_id = ? AND branch_id = ?")) {
+    const rackId = Number(params[0]);
+    const branchId = Number(params[1]);
+    return [racks.filter((r) => Number(r.rack_id) === rackId && Number(r.branch_id) === branchId)];
+  }
+
+  if (norm.includes("FROM racks WHERE branch_id = ?")) {
+    const branchId = Number(params[0]);
+    return [racks.filter((r) => Number(r.branch_id) === branchId).sort((a, b) => a.rack_code.localeCompare(b.rack_code))];
+  }
+
+  if (norm.startsWith("INSERT INTO racks")) {
+    const rackId = racks.length + 1;
+    racks.push({ rack_id: rackId, branch_id: Number(params[0]), rack_code: params[1] });
+    return [{ insertId: rackId, affectedRows: 1 }];
+  }
+
+  if (norm.startsWith("INSERT INTO branch_products")) {
+    const key = `${Number(params[0])}:${Number(params[1])}`;
+    branchProductRacks.set(key, params[2] != null ? Number(params[2]) : null);
+    return [{ affectedRows: 1 }];
   }
 
   // Default fallback
