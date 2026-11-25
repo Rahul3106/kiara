@@ -44,17 +44,32 @@ router.get("/overview", async (req, res) => {
       returnsAgg.map((r) => [Number(r.branch_id), Number(r.customer_returns || 0)])
     );
 
+    const [purchasesAgg] = await pool.query(
+      `SELECT
+         branch_id,
+         COALESCE(SUM(grand_total), 0) AS stock_purchases
+       FROM purchases
+       WHERE status = 'FINALIZED'
+       GROUP BY branch_id`
+    );
+    const purchasesByBranch = new Map(
+      purchasesAgg.map((p) => [Number(p.branch_id), Number(p.stock_purchases || 0)])
+    );
+
     let totalBilledCount = 0;
     let totalUnbilledCount = 0;
     let totalGrossBilled = 0;
     let totalUnbilled = 0;
     let totalReturns = 0;
+    let totalPurchases = 0;
 
     const salesByBranch = salesAgg.map((row) => {
       const billed = Number(row.gross_billed || 0);
       const unbilled = Number(row.unbilled_total || 0);
       const ret = returnsByBranch.get(Number(row.branch_id)) || 0;
+      const purch = purchasesByBranch.get(Number(row.branch_id)) || 0;
       const net = Number((billed + unbilled - ret).toFixed(2));
+      const profit = Number((net - purch).toFixed(2));
       const billedCount = Number(row.billed_count || 0);
       const unbilledCount = Number(row.unbilled_count || 0);
 
@@ -63,6 +78,7 @@ router.get("/overview", async (req, res) => {
       totalGrossBilled += billed;
       totalUnbilled += unbilled;
       totalReturns += ret;
+      totalPurchases += purch;
 
       return {
         branch_id: row.branch_id,
@@ -73,6 +89,8 @@ router.get("/overview", async (req, res) => {
         gross_billed: Number(billed.toFixed(2)),
         unbilled_total: Number(unbilled.toFixed(2)),
         customer_returns: Number(ret.toFixed(2)),
+        stock_purchases: Number(purch.toFixed(2)),
+        total_profit: profit,
         total_sales: net,
       };
     });
@@ -80,6 +98,7 @@ router.get("/overview", async (req, res) => {
     const netSalesTotal = Number(
       (totalGrossBilled + totalUnbilled - totalReturns).toFixed(2)
     );
+    const totalProfit = Number((netSalesTotal - totalPurchases).toFixed(2));
 
     const [productCount] = await pool.query(
       `SELECT COUNT(*) AS count FROM products WHERE is_active = TRUE`
@@ -96,6 +115,8 @@ router.get("/overview", async (req, res) => {
         gross_billed: Number(totalGrossBilled.toFixed(2)),
         unbilled_total: Number(totalUnbilled.toFixed(2)),
         customer_returns: Number(totalReturns.toFixed(2)),
+        stock_purchases: Number(totalPurchases.toFixed(2)),
+        total_profit: totalProfit,
         total_sales: netSalesTotal,
       },
       activeProductCount: productCount[0]?.count ?? 0,

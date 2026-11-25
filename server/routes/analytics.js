@@ -95,7 +95,8 @@ async function metricsForBranch(branchId, period) {
   const unbilledTotal = Number(unbilled[0].total);
   const customerReturns = Number(returns[0].total);
   const stockPurchases = Number(purchases[0].total);
-  const netTotal = grossBilled + unbilledTotal - customerReturns;
+  const netTotal = Number((grossBilled + unbilledTotal - customerReturns).toFixed(2));
+  const totalProfit = Number((netTotal - stockPurchases).toFixed(2));
 
   return {
     grossBilled,
@@ -103,6 +104,7 @@ async function metricsForBranch(branchId, period) {
     customerReturns,
     stockPurchases,
     netTotal,
+    totalProfit,
   };
 }
 
@@ -161,6 +163,7 @@ router.get(
         customerReturns: 0,
         stockPurchases: 0,
         netTotal: 0,
+        totalProfit: 0,
       };
 
       for (const branch of branches) {
@@ -178,7 +181,15 @@ router.get(
         overall.customerReturns += m.customerReturns;
         overall.stockPurchases += m.stockPurchases;
         overall.netTotal += m.netTotal;
+        overall.totalProfit += m.totalProfit;
       }
+
+      overall.grossBilled = Number(overall.grossBilled.toFixed(2));
+      overall.unbilledTotal = Number(overall.unbilledTotal.toFixed(2));
+      overall.customerReturns = Number(overall.customerReturns.toFixed(2));
+      overall.stockPurchases = Number(overall.stockPurchases.toFixed(2));
+      overall.netTotal = Number(overall.netTotal.toFixed(2));
+      overall.totalProfit = Number(overall.totalProfit.toFixed(2));
 
       res.json({
         success: true,

@@ -614,6 +614,7 @@ async function seedDemoOperationalData(conn, branchRows) {
   }
 
   await seedConsistentDemoV2(conn, branchRows, userByBranch, fallbackUserId);
+  await seedConsistentDemoV3(conn, branchRows, userByBranch, fallbackUserId);
 }
 
 async function adjustInventoryUnits(conn, branchId, batchId, deltaUnits) {
@@ -988,6 +989,154 @@ async function seedConsistentDemoV2(conn, branchRows, userByBranch, fallbackUser
     }
   }
   console.log("[MIGRATE] Seeded consistent v2 demo dataset (alerts, bills, purchases, returns, inventory).");
+}
+
+async function seedConsistentDemoV3(conn, branchRows, userByBranch, fallbackUserId) {
+  const [already] = await conn.query(
+    `SELECT sale_id FROM sales WHERE invoice_number LIKE '%-DEMO-301' LIMIT 1`
+  );
+  if (already.length > 0) return;
+
+  const [calRows] = await conn.query(`SELECT DAY(CURDATE()) AS dom`);
+  const dom = Math.max(1, Number(calRows?.[0]?.dom || 1));
+  const monthDaysAgoA = Math.min(8, dom - 1);
+  const monthDaysAgoB = Math.min(12, dom - 1);
+
+  for (const branch of branchRows) {
+    const userId = userByBranch.get(Number(branch.branch_id)) || fallbackUserId;
+    const prefix = branch.invoice_prefix || "KM";
+
+    const [patRows] = await conn.execute(
+      `SELECT patient_id, full_name, mobile FROM patients WHERE branch_id = ? ORDER BY patient_id ASC LIMIT 4`,
+      [branch.branch_id]
+    );
+    const [docRows] = await conn.execute(
+      `SELECT doctor_id, full_name FROM doctors WHERE branch_id = ? ORDER BY doctor_id ASC LIMIT 2`,
+      [branch.branch_id]
+    );
+    const [sellable] = await conn.execute(
+      `SELECT ba.batch_id, ba.product_id, ba.batch_number, ba.expiry_date, ba.mrp, ba.purchase_price,
+              i.selling_price, p.product_name, p.units_per_stock_unit, p.default_hsn_code, p.default_gst_rate
+       FROM batches ba
+       JOIN inventory i ON i.batch_id = ba.batch_id AND i.branch_id = ba.branch_id
+       JOIN products p ON p.product_id = ba.product_id
+       WHERE ba.branch_id = ?
+         AND (ba.expiry_date IS NULL OR ba.expiry_date > DATE_ADD(CURDATE(), INTERVAL 60 DAY))
+         AND i.quantity >= 6
+       ORDER BY i.quantity DESC, ba.batch_id ASC LIMIT 4`,
+      [branch.branch_id]
+    );
+    if (sellable.length < 2) continue;
+
+    const extraSales = [
+      { inv: `${prefix}-DEMO-301`, patIdx: 1, pay: "UPI", daysAgo: monthDaysAgoA, qty1: 20, qty2: 15 },
+      { inv: `${prefix}-DEMO-302`, patIdx: 3, pay: "CASH", daysAgo: monthDaysAgoB, qty1: 18, qty2: 12 },
+    ];
+
+    for (let idx = 0; idx < extraSales.length; idx++) {
+      const sc = extraSales[idx];
+      const pat = patRows[sc.patIdx % Math.max(1, patRows.length)] || null;
+      const doc = docRows[idx % Math.max(1, docRows.length)] || null;
+      const b1 = sellable[idx % sellable.length];
+      const b2 = sellable[(idx + 1) % sellable.length];
+      const lines = [{ batch: b1, qty: sc.qty1 }];
+      if (b2 && b2.batch_id !== b1.batch_id) lines.push({ batch: b2, qty: sc.qty2 });
+
+      let subtotal = 0;
+      let taxableTotal = 0;
+      let cgstTotal = 0;
+      let sgstTotal = 0;
+      const prepared = lines.map((ln) => {
+        const packSize = Math.max(1, Number(ln.batch.units_per_stock_unit || 1));
+        const unitPrice = Number((Number(ln.batch.selling_price) / packSize).toFixed(2));
+        const lineTotal = Number((unitPrice * ln.qty).toFixed(2));
+        const gst = Number(ln.batch.default_gst_rate || 5);
+        const taxable = Number((lineTotal / (1 + gst / 100)).toFixed(2));
+        const tax = Number((lineTotal - taxable).toFixed(2));
+        const cgst = Number((tax / 2).toFixed(2));
+        const sgst = Number((tax - cgst).toFixed(2));
+        subtotal += lineTotal;
+        taxableTotal += taxable;
+        cgstTotal += cgst;
+        sgstTotal += sgst;
+        return { ...ln, unitPrice, lineTotal, gst, taxable, cgst, sgst };
+      });
+
+      const grandTotal = Number(subtotal.toFixed(2));
+      const notes = pat
+        ? `Patient: ${pat.full_name} | Age: ${32 + idx} | Mobile: ${pat.mobile || "N/A"} | Gender: ${idx === 0 ? "FEMALE" : "MALE"} | Doctor: ${doc?.full_name || "Self"}`
+        : "Counter billed sale";
+
+      const [sRes] = await conn.execute(
+        `INSERT INTO sales (
+           branch_id, patient_id, doctor_id, sale_type, status, invoice_number,
+           client_transaction_id, sale_datetime, payment_method, subtotal, discount_total,
+           taxable_total, cgst_total, sgst_total, igst_total, grand_total, notes, created_by
+         ) VALUES (?, ?, ?, 'BILLED', 'FINALIZED', ?, ?, DATE_SUB(NOW(3), INTERVAL ? DAY), ?, ?, 0, ?, ?, ?, 0, ?, ?, ?)`,
+        [
+          branch.branch_id,
+          pat?.patient_id || null,
+          doc?.doctor_id || null,
+          sc.inv,
+          randomUUID(),
+          sc.daysAgo,
+          sc.pay,
+          grandTotal,
+          Number(taxableTotal.toFixed(2)),
+          Number(cgstTotal.toFixed(2)),
+          Number(sgstTotal.toFixed(2)),
+          grandTotal,
+          notes,
+          userId,
+        ]
+      );
+
+      for (const pl of prepared) {
+        await conn.execute(
+          `INSERT INTO sale_items (
+             sale_id, branch_id, batch_id, product_name_snapshot, batch_number_snapshot,
+             expiry_date_snapshot, quantity, mrp, unit_selling_price, discount_amount,
+             hsn_code, gst_rate, taxable_amount, cgst_amount, sgst_amount, igst_amount, line_total
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, ?)`,
+          [
+            sRes.insertId,
+            branch.branch_id,
+            pl.batch.batch_id,
+            pl.batch.product_name,
+            pl.batch.batch_number,
+            toDateStr(pl.batch.expiry_date),
+            pl.qty,
+            pl.batch.mrp,
+            pl.unitPrice,
+            pl.batch.default_hsn_code || "30049099",
+            pl.gst,
+            pl.taxable,
+            pl.cgst,
+            pl.sgst,
+            pl.lineTotal,
+          ]
+        );
+        await adjustInventoryUnits(conn, branch.branch_id, pl.batch.batch_id, -pl.qty);
+        await conn.execute(
+          `INSERT INTO stock_transactions (
+             branch_id, batch_id, transaction_type, quantity_delta, source_type,
+             source_key, idempotency_key, notes, occurred_at, created_by
+           ) VALUES (?, ?, 'SALE', ?, 'BILLED_SALE', ?, ?, ?, DATE_SUB(NOW(3), INTERVAL ? DAY), ?)`,
+          [
+            branch.branch_id,
+            pl.batch.batch_id,
+            -pl.qty,
+            sc.inv,
+            randomUUID(),
+            notes,
+            sc.daysAgo,
+            userId,
+          ]
+        );
+      }
+    }
+  }
+  console.log("[MIGRATE] Seeded consistent v3 monthly bills for positive monthly profit.");
 }
 
 module.exports = { ensureSchemaReady, splitSqlStatements };

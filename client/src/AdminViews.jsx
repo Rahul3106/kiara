@@ -94,31 +94,34 @@ export function AdminDashboard({ apiUrl, token, onSelectBranchSales }) {
   const branchCategories = (analytics?.byBranch || []).map((b) => b.branchName);
   const branchBarSeries = [
     {
-      name: "Gross Billed",
-      color: "#10b981",
-      data: (analytics?.byBranch || []).map((b) => Number(b.grossBilled || 0)),
-    },
-    {
-      name: "Stock Purchases",
-      color: "#f59e0b",
-      data: (analytics?.byBranch || []).map((b) => Number(b.stockPurchases || 0)),
-    },
-    {
       name: "Net Sales",
       color: "#2563eb",
       data: (analytics?.byBranch || []).map((b) => Number(b.netTotal || 0)),
     },
+    {
+      name: "Stock Purchases (−)",
+      color: "#f59e0b",
+      data: (analytics?.byBranch || []).map((b) => Number(b.stockPurchases || 0)),
+    },
+    {
+      name: "Total Profit",
+      color: "#10b981",
+      data: (analytics?.byBranch || []).map((b) =>
+        Number(b.totalProfit ?? (Number(b.netTotal || 0) - Number(b.stockPurchases || 0)))
+      ),
+    },
   ];
 
-  // Chart data: Overall cash flow breakdown
-  const revenueCompositionData = analytics?.overall
-    ? [
-        { label: "Billed Sales", value: Number(analytics.overall.grossBilled || 0), color: "#10b981" },
-        { label: "Stock Purchases", value: Number(analytics.overall.stockPurchases || 0), color: "#f59e0b" },
-        { label: "Unbilled Sales", value: Number(analytics.overall.unbilledTotal || 0), color: "#06b6d4" },
-        { label: "Customer Returns", value: Number(analytics.overall.customerReturns || 0), color: "#ef4444" },
-      ]
-    : [];
+  const overallProfit = analytics?.overall
+    ? Number(
+        analytics.overall.totalProfit ??
+          Number(analytics.overall.netTotal || 0) - Number(analytics.overall.stockPurchases || 0)
+      )
+    : 0;
+  const lifetimeProfit = Number(
+    overview.totals?.total_profit ??
+      Number(overview.totals?.total_sales || 0) - Number(overview.totals?.stock_purchases || 0)
+  );
 
   return (
     <>
@@ -147,9 +150,26 @@ export function AdminDashboard({ apiUrl, token, onSelectBranchSales }) {
             Stock purchases ({analytics?.label || "period"})
           </span>
           <p className="stat-card-value">
-            ₹{Number(analytics?.overall?.stockPurchases || 0).toFixed(2)}
+            − ₹{Number(analytics?.overall?.stockPurchases || 0).toFixed(2)}
           </p>
-          <span className="stat-card-hint">From purchase stock entries</span>
+          <span className="stat-card-hint">Supplier stock cost (deducted)</span>
+        </article>
+        <article className="stat-card stat-card-profit">
+          <span className="stat-card-label">
+            Total profit ({analytics?.label || "period"})
+          </span>
+          <p
+            className={`stat-card-value ${
+              overallProfit < 0 ? "metric-profit-negative" : "metric-profit-positive"
+            }`}
+          >
+            {overallProfit < 0
+              ? `− ₹${Math.abs(overallProfit).toFixed(2)}`
+              : `₹${overallProfit.toFixed(2)}`}
+          </p>
+          <span className="stat-card-hint">
+            Lifetime profit: {lifetimeProfit < 0 ? `− ₹${Math.abs(lifetimeProfit).toFixed(2)}` : `₹${lifetimeProfit.toFixed(2)}`}
+          </span>
         </article>
         <article className="stat-card stat-card-neutral">
           <span className="stat-card-label">Active branches</span>
@@ -163,7 +183,7 @@ export function AdminDashboard({ apiUrl, token, onSelectBranchSales }) {
       <div className="billing-card dashboard-analytics-panel">
         <div className="dashboard-section-head">
           <h3>Period analytics</h3>
-          <p>Shop-wise billed sales, stock purchases, and net totals.</p>
+          <p>Shop-wise net sales, stock purchases (deducted), and total profit.</p>
         </div>
         <div className="period-toggle">
           {["day", "week", "month"].map((p) => (
@@ -182,22 +202,30 @@ export function AdminDashboard({ apiUrl, token, onSelectBranchSales }) {
         {analytics?.overall && (
           <div className="dashboard-overall-strip">
             <div>
-              <span>Net sales</span>
-              <strong>₹{Number(analytics.overall.netTotal).toFixed(2)}</strong>
-            </div>
-            <div>
-              <span>Stock purchases</span>
-              <strong className="metric-purchase">
-                ₹{Number(analytics.overall.stockPurchases).toFixed(2)}
-              </strong>
-            </div>
-            <div>
               <span>Billed gross</span>
               <strong>₹{Number(analytics.overall.grossBilled).toFixed(2)}</strong>
             </div>
             <div>
               <span>Returns</span>
               <strong>− ₹{Number(analytics.overall.customerReturns).toFixed(2)}</strong>
+            </div>
+            <div>
+              <span>Net sales</span>
+              <strong>₹{Number(analytics.overall.netTotal).toFixed(2)}</strong>
+            </div>
+            <div>
+              <span>Stock purchases</span>
+              <strong className="metric-purchase">
+                − ₹{Number(analytics.overall.stockPurchases).toFixed(2)}
+              </strong>
+            </div>
+            <div>
+              <span>Total profit</span>
+              <strong className={overallProfit < 0 ? "metric-profit-negative" : "metric-profit-positive"}>
+                {overallProfit < 0
+                  ? `− ₹${Math.abs(overallProfit).toFixed(2)}`
+                  : `₹${overallProfit.toFixed(2)}`}
+              </strong>
             </div>
           </div>
         )}
@@ -214,22 +242,12 @@ export function AdminDashboard({ apiUrl, token, onSelectBranchSales }) {
           }
           centerLabel="Branch Sales"
         />
-        <DonutChart
-          title={`Revenue Breakdown (${analytics?.label || "Selected Period"})`}
-          data={revenueCompositionData}
-          centerLabel="Total Flow"
+        <BarChart
+          title={`Branch Sales, Purchases & Total Profit (${analytics?.label || "Selected Period"})`}
+          categories={branchCategories}
+          series={branchBarSeries}
         />
       </div>
-
-      {branchCategories.length > 0 && (
-        <div style={{ marginBottom: "20px" }}>
-          <BarChart
-            title={`Branch Performance Comparison (${analytics?.label || "Selected Period"})`}
-            categories={branchCategories}
-            series={branchBarSeries}
-          />
-        </div>
-      )}
 
       {analytics?.byBranch?.length > 0 && (
         <div className="table-card">
@@ -240,25 +258,42 @@ export function AdminDashboard({ apiUrl, token, onSelectBranchSales }) {
                 <tr>
                   <th>Branch</th>
                   <th>Billed</th>
-                  <th>Stock purchases</th>
                   <th>Unbilled</th>
                   <th>Returns</th>
                   <th>Net sales</th>
+                  <th>Stock purchases</th>
+                  <th>Total profit</th>
                 </tr>
               </thead>
               <tbody>
-                {analytics.byBranch.map((row) => (
-                  <tr key={row.branchId}>
-                    <td>{row.branchName}</td>
-                    <td>₹{Number(row.grossBilled).toFixed(2)}</td>
-                    <td className="metric-purchase">
-                      ₹{Number(row.stockPurchases || 0).toFixed(2)}
-                    </td>
-                    <td>₹{Number(row.unbilledTotal).toFixed(2)}</td>
-                    <td>₹{Number(row.customerReturns).toFixed(2)}</td>
-                    <td>₹{Number(row.netTotal).toFixed(2)}</td>
-                  </tr>
-                ))}
+                {analytics.byBranch.map((row) => {
+                  const rowProfit = Number(
+                    row.totalProfit ?? (Number(row.netTotal || 0) - Number(row.stockPurchases || 0))
+                  );
+                  return (
+                    <tr key={row.branchId}>
+                      <td>{row.branchName}</td>
+                      <td>₹{Number(row.grossBilled).toFixed(2)}</td>
+                      <td>₹{Number(row.unbilledTotal).toFixed(2)}</td>
+                      <td>− ₹{Number(row.customerReturns).toFixed(2)}</td>
+                      <td>₹{Number(row.netTotal).toFixed(2)}</td>
+                      <td className="metric-purchase">
+                        − ₹{Number(row.stockPurchases || 0).toFixed(2)}
+                      </td>
+                      <td>
+                        <strong
+                          className={
+                            rowProfit < 0 ? "metric-profit-negative" : "metric-profit-positive"
+                          }
+                        >
+                          {rowProfit < 0
+                            ? `− ₹${Math.abs(rowProfit).toFixed(2)}`
+                            : `₹${rowProfit.toFixed(2)}`}
+                        </strong>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

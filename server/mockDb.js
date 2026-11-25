@@ -409,6 +409,21 @@ async function executeMockQuery(sql, params = []) {
     ];
   }
 
+  if (norm.includes("FROM purchases") && norm.includes("GROUP BY branch_id")) {
+    const map = new Map();
+    for (const p of purchases) {
+      if (p.status !== "FINALIZED") continue;
+      const bId = Number(p.branch_id);
+      map.set(bId, (map.get(bId) || 0) + Number(p.grand_total || 0));
+    }
+    return [
+      Array.from(map.entries()).map(([branch_id, stock_purchases]) => ({
+        branch_id,
+        stock_purchases,
+      })),
+    ];
+  }
+
   if (norm.includes("FROM customer_returns") && norm.includes("GROUP BY branch_id")) {
     const map = new Map();
     for (const cr of customer_returns) {

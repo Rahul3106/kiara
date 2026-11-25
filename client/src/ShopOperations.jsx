@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { MedicineSearchRow } from "./MedicineSearchRow.jsx";
-import { DonutChart, BarChart } from "./components/AnalyticsCharts.jsx";
+import { BarChart } from "./components/AnalyticsCharts.jsx";
 import { numberToWordsIndian } from "./utils/numberToWords.js";
 
 function headers(token) {
@@ -22,8 +22,19 @@ async function readJsonResponse(response, fallbackMessage) {
   }
 }
 
+function formatSignedRupees(value) {
+  const num = Number(value || 0);
+  if (num < 0) return `− ₹${Math.abs(num).toFixed(2)}`;
+  return `₹${num.toFixed(2)}`;
+}
+
 function MetricGrid({ title, data, highlight }) {
   if (!data) return null;
+  const netSales = Number(data.netTotal || 0);
+  const stockPurchases = Number(data.stockPurchases || 0);
+  const totalProfit = Number(
+    data.totalProfit ?? Number((netSales - stockPurchases).toFixed(2))
+  );
   return (
     <article
       className={`metric-period-card${highlight ? " metric-period-card-highlight" : ""}`}
@@ -35,12 +46,6 @@ function MetricGrid({ title, data, highlight }) {
           <strong>₹{Number(data.grossBilled || 0).toFixed(2)}</strong>
         </div>
         <div className="metric-period-row">
-          <span>Stock purchases</span>
-          <strong className="metric-purchase">
-            ₹{Number(data.stockPurchases || 0).toFixed(2)}
-          </strong>
-        </div>
-        <div className="metric-period-row">
           <span>Unbilled sales</span>
           <strong>₹{Number(data.unbilledTotal || 0).toFixed(2)}</strong>
         </div>
@@ -48,12 +53,63 @@ function MetricGrid({ title, data, highlight }) {
           <span>Customer returns</span>
           <strong>− ₹{Number(data.customerReturns || 0).toFixed(2)}</strong>
         </div>
-        <div className="metric-period-row metric-period-net">
+        <div className="metric-period-row">
           <span>Net sales</span>
-          <strong>₹{Number(data.netTotal || 0).toFixed(2)}</strong>
+          <strong>₹{netSales.toFixed(2)}</strong>
+        </div>
+        <div className="metric-period-row">
+          <span>Stock purchases</span>
+          <strong className="metric-purchase">
+            − ₹{stockPurchases.toFixed(2)}
+          </strong>
+        </div>
+        <div className="metric-period-row metric-period-net">
+          <span>Total profit</span>
+          <strong className={totalProfit < 0 ? "metric-profit-negative" : "metric-profit-positive"}>
+            {formatSignedRupees(totalProfit)}
+          </strong>
         </div>
       </div>
     </article>
+  );
+}
+
+function ProfitSummaryCard({ analytics }) {
+  const rows = [
+    { key: "day", label: analytics?.day?.label || "Today" },
+    { key: "week", label: analytics?.week?.label || "This week" },
+    { key: "month", label: analytics?.month?.label || "This month" },
+  ];
+
+  return (
+    <div className="chart-container profit-summary-card">
+      <h4 className="chart-title">Total Profit Summary (Net Sales − Stock Purchases)</h4>
+      <div className="profit-rows">
+        {rows.map(({ key, label }) => {
+          const d = analytics?.[key] || {};
+          const netSales = Number(d.netTotal || 0);
+          const purchases = Number(d.stockPurchases || 0);
+          const profit = Number(d.totalProfit ?? (netSales - purchases));
+          return (
+            <div key={key} className="profit-period-row">
+              <div>
+                <strong>{label}</strong>
+                <small>
+                  Net sales ₹{netSales.toFixed(2)} − Purchases ₹{purchases.toFixed(2)}
+                </small>
+              </div>
+              <strong
+                className={`profit-period-amount ${
+                  profit < 0 ? "metric-profit-negative" : "metric-profit-positive"
+                }`}
+              >
+                {formatSignedRupees(profit)}
+              </strong>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -82,7 +138,6 @@ function useBranchAnalytics(apiUrl, token) {
 export function ShopDashboard({ apiUrl, token, branchName, userName }) {
   const { analytics, error } = useBranchAnalytics(apiUrl, token);
   const [alertCounts, setAlertCounts] = useState({ low: 0, expiry: 0 });
-  const [chartPeriod, setChartPeriod] = useState("month");
 
   useEffect(() => {
     (async () => {
@@ -104,30 +159,24 @@ export function ShopDashboard({ apiUrl, token, branchName, userName }) {
   }, [apiUrl, token]);
 
   const month = analytics?.month;
-  const currentMetric = analytics?.[chartPeriod];
-
-  const donutData = currentMetric
-    ? [
-        { label: "Billed Sales", value: Number(currentMetric.grossBilled || 0), color: "#10b981" },
-        { label: "Stock Purchases", value: Number(currentMetric.stockPurchases || 0), color: "#f59e0b" },
-        { label: "Unbilled Sales", value: Number(currentMetric.unbilledTotal || 0), color: "#06b6d4" },
-        { label: "Customer Returns", value: Number(currentMetric.customerReturns || 0), color: "#ef4444" },
-      ]
-    : [];
+  const monthProfit = Number(
+    month?.totalProfit ??
+      Number(month?.netTotal || 0) - Number(month?.stockPurchases || 0)
+  );
 
   const periodBarCategories = ["Today", "This Week", "This Month"];
   const periodBarSeries = [
     {
-      name: "Gross Billed",
-      color: "#10b981",
+      name: "Net Sales",
+      color: "#2563eb",
       data: [
-        Number(analytics?.day?.grossBilled || 0),
-        Number(analytics?.week?.grossBilled || 0),
-        Number(analytics?.month?.grossBilled || 0),
+        Number(analytics?.day?.netTotal || 0),
+        Number(analytics?.week?.netTotal || 0),
+        Number(analytics?.month?.netTotal || 0),
       ],
     },
     {
-      name: "Stock Purchases",
+      name: "Stock Purchases (−)",
       color: "#f59e0b",
       data: [
         Number(analytics?.day?.stockPurchases || 0),
@@ -136,12 +185,12 @@ export function ShopDashboard({ apiUrl, token, branchName, userName }) {
       ],
     },
     {
-      name: "Net Sales",
-      color: "#2563eb",
+      name: "Total Profit",
+      color: "#10b981",
       data: [
-        Number(analytics?.day?.netTotal || 0),
-        Number(analytics?.week?.netTotal || 0),
-        Number(analytics?.month?.netTotal || 0),
+        Number(analytics?.day?.totalProfit ?? (Number(analytics?.day?.netTotal || 0) - Number(analytics?.day?.stockPurchases || 0))),
+        Number(analytics?.week?.totalProfit ?? (Number(analytics?.week?.netTotal || 0) - Number(analytics?.week?.stockPurchases || 0))),
+        monthProfit,
       ],
     },
   ];
@@ -170,9 +219,20 @@ export function ShopDashboard({ apiUrl, token, branchName, userName }) {
         <article className="stat-card stat-card-purchase">
           <span className="stat-card-label">Stock purchases (this month)</span>
           <p className="stat-card-value">
-            ₹{Number(month?.stockPurchases || 0).toFixed(2)}
+            − ₹{Number(month?.stockPurchases || 0).toFixed(2)}
           </p>
-          <span className="stat-card-hint">Supplier invoices recorded</span>
+          <span className="stat-card-hint">Supplier stock cost (deducted)</span>
+        </article>
+        <article className="stat-card stat-card-profit">
+          <span className="stat-card-label">Total profit (this month)</span>
+          <p
+            className={`stat-card-value ${
+              monthProfit < 0 ? "metric-profit-negative" : "metric-profit-positive"
+            }`}
+          >
+            {formatSignedRupees(monthProfit)}
+          </p>
+          <span className="stat-card-hint">Net sales − stock purchases</span>
         </article>
         <article className="stat-card stat-card-alert">
           <span className="stat-card-label">Alerts</span>
@@ -188,46 +248,19 @@ export function ShopDashboard({ apiUrl, token, branchName, userName }) {
       {!analytics && !error && <p className="empty-state">Loading metrics…</p>}
 
       {analytics && (
-        <>
-          <div className="billing-card" style={{ padding: "16px 20px", marginBottom: "20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-              <div style={{ fontWeight: 600, fontSize: "14px", color: "#334155" }}>
-                Select Period for Revenue Breakdown Chart:
-              </div>
-              <div className="period-toggle" style={{ margin: 0 }}>
-                {["day", "week", "month"].map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    className={chartPeriod === p ? "primary-button" : "secondary-button"}
-                    onClick={() => setChartPeriod(p)}
-                    style={{ minHeight: "34px", padding: "6px 14px", fontSize: "13px" }}
-                  >
-                    {p === "day" ? "Today" : p === "week" ? "This Week" : "This Month"}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="charts-grid-2col">
-            <DonutChart
-              title={`Cash Flow Breakdown (${currentMetric?.label || "Selected"})`}
-              data={donutData}
-              centerLabel="Net Total"
-            />
-            <BarChart
-              title="Sales & Purchases Comparison (Day / Week / Month)"
-              categories={periodBarCategories}
-              series={periodBarSeries}
-            />
-          </div>
-        </>
+        <div className="charts-grid-2col">
+          <ProfitSummaryCard analytics={analytics} />
+          <BarChart
+            title="Sales, Purchases & Total Profit (Day / Week / Month)"
+            categories={periodBarCategories}
+            series={periodBarSeries}
+          />
+        </div>
       )}
 
       <div className="dashboard-section-head">
-        <h3>Sales & purchases by period</h3>
-        <p>Includes monthly stock purchase totals from purchase entries.</p>
+        <h3>Sales, purchases &amp; profit by period</h3>
+        <p>Stock purchases are subtracted from net sales to compute total profit.</p>
       </div>
       <div className="dashboard-grid dashboard-grid-metrics">
         <MetricGrid title={analytics?.day?.label || "Today"} data={analytics?.day} />
@@ -247,32 +280,20 @@ export function ShopDashboard({ apiUrl, token, branchName, userName }) {
 
 export function ShopAnalytics({ apiUrl, token }) {
   const { analytics, error } = useBranchAnalytics(apiUrl, token);
-  const [chartPeriod, setChartPeriod] = useState("month");
-
-  const currentMetric = analytics?.[chartPeriod];
-
-  const donutData = currentMetric
-    ? [
-        { label: "Billed Sales", value: Number(currentMetric.grossBilled || 0), color: "#10b981" },
-        { label: "Stock Purchases", value: Number(currentMetric.stockPurchases || 0), color: "#f59e0b" },
-        { label: "Unbilled Sales", value: Number(currentMetric.unbilledTotal || 0), color: "#06b6d4" },
-        { label: "Customer Returns", value: Number(currentMetric.customerReturns || 0), color: "#ef4444" },
-      ]
-    : [];
 
   const periodBarCategories = ["Today", "This Week", "This Month"];
   const periodBarSeries = [
     {
-      name: "Gross Billed",
-      color: "#10b981",
+      name: "Net Sales",
+      color: "#2563eb",
       data: [
-        Number(analytics?.day?.grossBilled || 0),
-        Number(analytics?.week?.grossBilled || 0),
-        Number(analytics?.month?.grossBilled || 0),
+        Number(analytics?.day?.netTotal || 0),
+        Number(analytics?.week?.netTotal || 0),
+        Number(analytics?.month?.netTotal || 0),
       ],
     },
     {
-      name: "Stock Purchases",
+      name: "Stock Purchases (−)",
       color: "#f59e0b",
       data: [
         Number(analytics?.day?.stockPurchases || 0),
@@ -281,12 +302,12 @@ export function ShopAnalytics({ apiUrl, token }) {
       ],
     },
     {
-      name: "Net Sales",
-      color: "#2563eb",
+      name: "Total Profit",
+      color: "#10b981",
       data: [
-        Number(analytics?.day?.netTotal || 0),
-        Number(analytics?.week?.netTotal || 0),
-        Number(analytics?.month?.netTotal || 0),
+        Number(analytics?.day?.totalProfit ?? (Number(analytics?.day?.netTotal || 0) - Number(analytics?.day?.stockPurchases || 0))),
+        Number(analytics?.week?.totalProfit ?? (Number(analytics?.week?.netTotal || 0) - Number(analytics?.week?.stockPurchases || 0))),
+        Number(analytics?.month?.totalProfit ?? (Number(analytics?.month?.netTotal || 0) - Number(analytics?.month?.stockPurchases || 0))),
       ],
     },
   ];
@@ -297,48 +318,21 @@ export function ShopAnalytics({ apiUrl, token }) {
         <div>
           <p className="eyebrow">REPORTS</p>
           <h2>Branch analytics</h2>
-          <p>Daily, weekly, and monthly sales and stock purchases.</p>
+          <p>Daily, weekly, and monthly sales, stock purchases, and total profit.</p>
         </div>
       </div>
       {error && <div className="error-message">{error}</div>}
       {!analytics && !error && <p className="empty-state">Loading…</p>}
 
       {analytics && (
-        <>
-          <div className="billing-card" style={{ padding: "16px 20px", marginBottom: "20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-              <div style={{ fontWeight: 600, fontSize: "14px", color: "#334155" }}>
-                Select Period for Revenue Breakdown Chart:
-              </div>
-              <div className="period-toggle" style={{ margin: 0 }}>
-                {["day", "week", "month"].map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    className={chartPeriod === p ? "primary-button" : "secondary-button"}
-                    onClick={() => setChartPeriod(p)}
-                    style={{ minHeight: "34px", padding: "6px 14px", fontSize: "13px" }}
-                  >
-                    {p === "day" ? "Today" : p === "week" ? "This Week" : "This Month"}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="charts-grid-2col">
-            <DonutChart
-              title={`Cash Flow Breakdown (${currentMetric?.label || "Selected"})`}
-              data={donutData}
-              centerLabel="Net Total"
-            />
-            <BarChart
-              title="Sales & Purchases Comparison (Day / Week / Month)"
-              categories={periodBarCategories}
-              series={periodBarSeries}
-            />
-          </div>
-        </>
+        <div className="charts-grid-2col">
+          <ProfitSummaryCard analytics={analytics} />
+          <BarChart
+            title="Sales, Purchases & Total Profit (Day / Week / Month)"
+            categories={periodBarCategories}
+            series={periodBarSeries}
+          />
+        </div>
       )}
 
       <div className="dashboard-grid dashboard-grid-metrics">
