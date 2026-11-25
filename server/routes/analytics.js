@@ -108,6 +108,80 @@ async function metricsForBranch(branchId, period) {
   };
 }
 
+async function getDashboardCharts(branchId, period = "month") {
+  const saleWhen = periodDateFilter("s.sale_datetime", period) || periodDateFilter("s.sale_datetime", "month");
+  const monthWhen = periodDateFilter("s.sale_datetime", "month");
+  const branchClause = branchId != null ? " AND s.branch_id = ?" : "";
+  const branchParams = branchId != null ? [Number(branchId)] : [];
+
+  const [paymentRows] = await pool.query(
+    `SELECT
+       s.payment_method,
+       COUNT(*) AS bill_count,
+       COALESCE(SUM(s.grand_total), 0) AS total
+     FROM sales s
+     WHERE s.status = 'FINALIZED'
+       AND s.sale_type = 'BILLED'
+       AND ${saleWhen}${branchClause}
+     GROUP BY s.payment_method
+     ORDER BY total DESC`,
+    branchParams
+  );
+
+  const [trendRows] = await pool.query(
+    `SELECT
+       DATE(s.sale_datetime) AS sale_day,
+       COUNT(*) AS bill_count,
+       COALESCE(SUM(s.grand_total), 0) AS total
+     FROM sales s
+     WHERE s.status = 'FINALIZED'
+       AND ${monthWhen}${branchClause}
+     GROUP BY DATE(s.sale_datetime)
+     ORDER BY sale_day ASC`,
+    branchParams
+  );
+
+  const [topMedicineRows] = await pool.query(
+    `SELECT
+       si.product_name_snapshot AS product_name,
+       COALESCE(SUM(si.quantity), 0) AS units_sold,
+       COALESCE(SUM(si.line_total), 0) AS revenue
+     FROM sale_items si
+     JOIN sales s ON s.sale_id = si.sale_id AND s.branch_id = si.branch_id
+     WHERE s.status = 'FINALIZED'
+       AND ${saleWhen}${branchClause}
+     GROUP BY si.product_name_snapshot
+     ORDER BY revenue DESC
+     LIMIT 6`,
+    branchParams
+  );
+
+  return {
+    paymentMix: paymentRows.map((r) => ({
+      paymentMethod: r.payment_method || "OTHER",
+      billCount: Number(r.bill_count || 0),
+      total: Number(Number(r.total || 0).toFixed(2)),
+    })),
+    dailyTrend: trendRows.map((r) => {
+      const dateStr =
+        r.sale_day instanceof Date
+          ? r.sale_day.toISOString().slice(0, 10)
+          : String(r.sale_day).slice(0, 10);
+      return {
+        date: dateStr,
+        label: dateStr.slice(5),
+        billCount: Number(r.bill_count || 0),
+        total: Number(Number(r.total || 0).toFixed(2)),
+      };
+    }),
+    topMedicines: topMedicineRows.map((r) => ({
+      productName: r.product_name,
+      unitsSold: Number(r.units_sold || 0),
+      revenue: Number(Number(r.revenue || 0).toFixed(2)),
+    })),
+  };
+}
+
 router.get("/branch", authenticateToken, async (req, res) => {
   try {
     if (!["SHOP_USER", "SHOP_MANAGER"].includes(req.user.role)) {
@@ -130,7 +204,9 @@ router.get("/branch", authenticateToken, async (req, res) => {
       };
     }
 
-    res.json({ success: true, branchId, analytics: result });
+    const charts = await getDashboardCharts(branchId, "month");
+
+    res.json({ success: true, branchId, analytics: result, charts });
   } catch (error) {
     console.error("Branch analytics error:", error.message);
     res.status(500).json({ success: false, message: "Unable to load analytics." });
@@ -191,12 +267,15 @@ router.get(
       overall.netTotal = Number(overall.netTotal.toFixed(2));
       overall.totalProfit = Number(overall.totalProfit.toFixed(2));
 
+      const charts = await getDashboardCharts(null, period);
+
       res.json({
         success: true,
         period,
         label: bounds.label,
         overall,
         byBranch,
+        charts,
       });
     } catch (error) {
       console.error("Admin analytics error:", error.message);

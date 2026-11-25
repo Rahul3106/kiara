@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { DonutChart, BarChart } from "./components/AnalyticsCharts.jsx";
+import {
+  AreaLineChart,
+  BarChart,
+  DonutChart,
+  HorizontalBarChart,
+} from "./components/AnalyticsCharts.jsx";
 
 function authHeaders(token) {
   return {
@@ -122,6 +127,29 @@ export function AdminDashboard({ apiUrl, token, onSelectBranchSales }) {
     overview.totals?.total_profit ??
       Number(overview.totals?.total_sales || 0) - Number(overview.totals?.stock_purchases || 0)
   );
+
+  const paymentColors = {
+    UPI: "#10b981",
+    CASH: "#2563eb",
+    CARD: "#8b5cf6",
+    OTHER: "#f59e0b",
+  };
+  const paymentMixData = (analytics?.charts?.paymentMix || []).map((p) => ({
+    label: `${p.paymentMethod} (${p.billCount})`,
+    value: Number(p.total || 0),
+    color: paymentColors[p.paymentMethod] || "#64748b",
+  }));
+  const dailyTrendPoints = (analytics?.charts?.dailyTrend || []).map((d) => ({
+    label: d.label,
+    date: d.date,
+    value: Number(d.total || 0),
+    sub: `${d.billCount} bill${d.billCount === 1 ? "" : "s"}`,
+  }));
+  const topMedicineItems = (analytics?.charts?.topMedicines || []).map((m) => ({
+    label: m.productName,
+    sub: `${m.unitsSold} units`,
+    value: Number(m.revenue || 0),
+  }));
 
   return (
     <>
@@ -248,6 +276,30 @@ export function AdminDashboard({ apiUrl, token, onSelectBranchSales }) {
           series={branchBarSeries}
         />
       </div>
+
+      {analytics?.charts && (
+        <>
+          <div className="charts-grid-2col" style={{ marginTop: "20px" }}>
+            <AreaLineChart
+              title="Daily Sales Trend — All Branches (This Month)"
+              points={dailyTrendPoints}
+              color="#2563eb"
+            />
+            <DonutChart
+              title={`Payment Mode Breakdown (${analytics?.label || "Selected Period"})`}
+              data={paymentMixData}
+              centerLabel="Billed Sales"
+            />
+          </div>
+          <div style={{ marginTop: "20px", marginBottom: "22px" }}>
+            <HorizontalBarChart
+              title={`Top Selling Medicines — All Branches (${analytics?.label || "Selected Period"})`}
+              items={topMedicineItems}
+              color="#10b981"
+            />
+          </div>
+        </>
+      )}
 
       {analytics?.byBranch?.length > 0 && (
         <div className="table-card">

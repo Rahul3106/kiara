@@ -319,3 +319,171 @@ export function MetricBreakdownBar({
     </div>
   );
 }
+
+export function AreaLineChart({
+  points = [],
+  title = "Daily Sales Trend",
+  color = "#2563eb",
+  formatValue = (v) => `₹${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,
+}) {
+  const [hovered, setHovered] = useState(null);
+
+  if (!points.length) {
+    return (
+      <div className="chart-container empty-chart">
+        {title && <h4 className="chart-title">{title}</h4>}
+        <div className="chart-empty-state">
+          <p>No daily trend data available yet</p>
+        </div>
+      </div>
+    );
+  }
+
+  const width = 520;
+  const height = 210;
+  const padX = 48;
+  const padY = 22;
+  const plotW = width - padX * 2;
+  const plotH = height - padY * 2;
+
+  const values = points.map((p) => Number(p.value || 0));
+  const maxVal = Math.max(100, ...values) * 1.12;
+
+  const coords = points.map((p, idx) => {
+    const x =
+      points.length === 1
+        ? padX + plotW / 2
+        : padX + (idx / (points.length - 1)) * plotW;
+    const y = padY + plotH - (Number(p.value || 0) / maxVal) * plotH;
+    return { ...p, x, y };
+  });
+
+  const linePath = coords.map((c, idx) => `${idx === 0 ? "M" : "L"} ${c.x} ${c.y}`).join(" ");
+  const areaPath =
+    coords.length > 1
+      ? `${linePath} L ${coords[coords.length - 1].x} ${padY + plotH} L ${coords[0].x} ${padY + plotH} Z`
+      : "";
+
+  const ticks = [0, 0.5, 1].map((f) => ({
+    y: padY + plotH - f * plotH,
+    label: formatValue(maxVal * f),
+  }));
+
+  return (
+    <div className="chart-container">
+      {title && <h4 className="chart-title">{title}</h4>}
+      <div className="area-chart-wrap">
+        <svg viewBox={`0 0 ${width} ${height}`} className="area-chart-svg">
+          <defs>
+            <linearGradient id="areaGradBlue" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+              <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
+          {ticks.map((t, i) => (
+            <g key={i}>
+              <line
+                x1={padX}
+                y1={t.y}
+                x2={width - padX}
+                y2={t.y}
+                stroke="#e2e8f0"
+                strokeDasharray="3 3"
+              />
+              <text x={padX - 6} y={t.y + 4} textAnchor="end" fontSize="10" fill="#64748b">
+                {t.label}
+              </text>
+            </g>
+          ))}
+          {areaPath && <path d={areaPath} fill="url(#areaGradBlue)" />}
+          {coords.length > 1 && (
+            <path d={linePath} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" />
+          )}
+          {coords.map((c, idx) => (
+            <g key={c.label + idx}>
+              <circle
+                cx={c.x}
+                cy={c.y}
+                r={hovered === idx ? 6 : 4}
+                fill="#fff"
+                stroke={color}
+                strokeWidth="2.5"
+                style={{ cursor: "pointer" }}
+                onMouseEnter={() => setHovered(idx)}
+                onMouseLeave={() => setHovered(null)}
+              />
+              {(coords.length <= 8 || idx === 0 || idx === coords.length - 1 || idx % 2 === 0) && (
+                <text
+                  x={c.x}
+                  y={height - 4}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fill="#64748b"
+                >
+                  {c.label}
+                </text>
+              )}
+            </g>
+          ))}
+        </svg>
+        {hovered !== null && coords[hovered] && (
+          <div className="area-chart-hover-badge">
+            <strong>{coords[hovered].date || coords[hovered].label}</strong>:{" "}
+            {formatValue(coords[hovered].value)}
+            {coords[hovered].sub ? ` (${coords[hovered].sub})` : ""}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function HorizontalBarChart({
+  items = [],
+  title = "Top Items",
+  color = "#10b981",
+  formatValue = (v) => `₹${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,
+}) {
+  if (!items.length) {
+    return (
+      <div className="chart-container empty-chart">
+        {title && <h4 className="chart-title">{title}</h4>}
+        <div className="chart-empty-state">
+          <p>No medicine sales recorded yet</p>
+        </div>
+      </div>
+    );
+  }
+
+  const maxVal = Math.max(1, ...items.map((i) => Number(i.value || 0)));
+
+  return (
+    <div className="chart-container">
+      {title && <h4 className="chart-title">{title}</h4>}
+      <div className="hbar-list">
+        {items.map((it, idx) => {
+          const pct = Math.max(4, Math.round((Number(it.value || 0) / maxVal) * 100));
+          return (
+            <div key={it.label + idx} className="hbar-row">
+              <div className="hbar-head">
+                <span className="hbar-name">
+                  {idx + 1}. {it.label}
+                </span>
+                <span className="hbar-meta">
+                  {it.sub ? <small>{it.sub} · </small> : null}
+                  <strong>{formatValue(it.value)}</strong>
+                </span>
+              </div>
+              <div className="hbar-track">
+                <div
+                  className="hbar-fill"
+                  style={{ width: `${pct}%`, backgroundColor: it.color || color }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

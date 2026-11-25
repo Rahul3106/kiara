@@ -615,6 +615,7 @@ async function seedDemoOperationalData(conn, branchRows) {
 
   await seedConsistentDemoV2(conn, branchRows, userByBranch, fallbackUserId);
   await seedConsistentDemoV3(conn, branchRows, userByBranch, fallbackUserId);
+  await seedConsistentDemoV4(conn, branchRows, userByBranch, fallbackUserId);
 }
 
 async function adjustInventoryUnits(conn, branchId, batchId, deltaUnits) {
@@ -1137,6 +1138,235 @@ async function seedConsistentDemoV3(conn, branchRows, userByBranch, fallbackUser
     }
   }
   console.log("[MIGRATE] Seeded consistent v3 monthly bills for positive monthly profit.");
+}
+
+async function seedConsistentDemoV4(conn, branchRows, userByBranch, fallbackUserId) {
+  const [already] = await conn.query(
+    `SELECT sale_id FROM sales WHERE invoice_number LIKE '%-DEMO-401' LIMIT 1`
+  );
+  if (already.length > 0) return;
+
+  const [calRows] = await conn.query(`SELECT DAY(CURDATE()) AS dom, WEEKDAY(CURDATE()) AS wd`);
+  const dom = Math.max(1, Number(calRows?.[0]?.dom || 1));
+
+  const extraDocNames = ["Dr. Suresh Nair", "Dr. Priya Deshmukh"];
+
+  for (let bIdx = 0; bIdx < branchRows.length; bIdx++) {
+    const branch = branchRows[bIdx];
+    const userId = userByBranch.get(Number(branch.branch_id)) || fallbackUserId;
+    const prefix = branch.invoice_prefix || "KM";
+
+    // Ensure extra prescribing doctors exist for this branch
+    for (const dName of extraDocNames) {
+      const [dFound] = await conn.execute(
+        `SELECT doctor_id FROM doctors WHERE branch_id = ? AND LOWER(TRIM(full_name)) = LOWER(?) LIMIT 1`,
+        [branch.branch_id, dName]
+      );
+      if (!dFound.length) {
+        await conn.execute(
+          `INSERT INTO doctors (branch_id, full_name) VALUES (?, ?)`,
+          [branch.branch_id, dName]
+        );
+      }
+    }
+
+    const [patRows] = await conn.execute(
+      `SELECT patient_id, full_name, mobile FROM patients WHERE branch_id = ? ORDER BY patient_id ASC LIMIT 4`,
+      [branch.branch_id]
+    );
+    const [docRows] = await conn.execute(
+      `SELECT doctor_id, full_name FROM doctors WHERE branch_id = ? ORDER BY doctor_id ASC LIMIT 4`,
+      [branch.branch_id]
+    );
+    const [supRows] = await conn.execute(
+      `SELECT supplier_id FROM suppliers WHERE branch_id = ? AND is_active = TRUE ORDER BY supplier_id ASC LIMIT 3`,
+      [branch.branch_id]
+    );
+
+    // Pick high-value, long-expiry batches so 12 monthly bills hit ~35k for BR001 (~24k BR002, ~19k BR003)
+    const [sellable] = await conn.execute(
+      `SELECT ba.batch_id, ba.product_id, ba.batch_number, ba.expiry_date, ba.mrp, ba.purchase_price,
+              i.selling_price, p.product_name, p.units_per_stock_unit, p.default_hsn_code, p.default_gst_rate
+       FROM batches ba
+       JOIN inventory i ON i.batch_id = ba.batch_id AND i.branch_id = ba.branch_id
+       JOIN products p ON p.product_id = ba.product_id
+       WHERE ba.branch_id = ?
+         AND (ba.expiry_date IS NULL OR ba.expiry_date > DATE_ADD(CURDATE(), INTERVAL 90 DAY))
+         AND i.quantity >= 5
+       ORDER BY ba.mrp DESC, ba.batch_id ASC LIMIT 6`,
+      [branch.branch_id]
+    );
+    if (sellable.length < 3) continue;
+
+    // 1. Restock plenty of packs first via 3 consistent purchases so inventory stays healthy & purchases scale cleanly
+    const restockPacks = bIdx === 0 ? 35 : bIdx === 1 ? 24 : 18;
+    if (supRows.length) {
+      const purDays = [0, Math.min(4, dom - 1), Math.min(11, dom - 1)];
+      for (let pIdx = 0; pIdx < 3; pIdx++) {
+        const batch = sellable[pIdx % sellable.length];
+        const packs = Math.max(8, Math.round(restockPacks / 3));
+        const packSize = Math.max(1, Number(batch.units_per_stock_unit || 1));
+        const addUnits = packs * packSize;
+        const lineTotal = Number((Number(batch.purchase_price) * packs).toFixed(2));
+        const invNo = `PUR4-${branch.branch_code}-0${pIdx + 1}`;
+        const supId = supRows[pIdx % supRows.length].supplier_id;
+
+        const [pRes] = await conn.execute(
+          `INSERT INTO purchases (
+             branch_id, supplier_id, supplier_invoice_number, purchase_datetime, payment_method,
+             subtotal, discount_total, taxable_total, cgst_total, sgst_total, grand_total,
+             status, client_transaction_id, notes, created_by
+           ) VALUES (?, ?, ?, DATE_SUB(NOW(3), INTERVAL ? DAY), ?, ?, 0, 0, 0, 0, ?, 'FINALIZED', ?, 'Monthly high-volume restock', ?)`,
+          [branch.branch_id, supId, invNo, purDays[pIdx], pIdx === 1 ? "CHEQUE" : "CASH", lineTotal, lineTotal, randomUUID(), userId]
+        );
+        await conn.execute(
+          `INSERT INTO purchase_items (
+             purchase_id, branch_id, product_id, batch_id, batch_number, expiry_date,
+             quantity_packs, quantity_smallest_units, purchase_price, mrp, selling_price,
+             hsn_code, gst_rate, line_total
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            pRes.insertId,
+            branch.branch_id,
+            batch.product_id,
+            batch.batch_id,
+            batch.batch_number,
+            toDateStr(batch.expiry_date),
+            packs,
+            addUnits,
+            batch.purchase_price,
+            batch.mrp,
+            batch.selling_price,
+            batch.default_hsn_code || "30049099",
+            batch.default_gst_rate || 5,
+            lineTotal,
+          ]
+        );
+        await adjustInventoryUnits(conn, branch.branch_id, batch.batch_id, addUnits);
+      }
+    }
+
+    // 2. Seed 12 realistic billed sales distributed across the current month (~₹2,800 avg per bill for BR001 -> ~35k total)
+    const daysOffsets = [0, 0, 1, 2, 3, 5, 7, 9, 12, 15, 18, 21];
+    const payCycle = ["UPI", "CARD", "CASH"];
+    const scaleFactor = bIdx === 0 ? 1 : bIdx === 1 ? 0.72 : 0.56;
+
+    for (let sIdx = 0; sIdx < daysOffsets.length; sIdx++) {
+      const daysAgo = Math.min(daysOffsets[sIdx], dom - 1);
+      const pat = patRows[sIdx % Math.max(1, patRows.length)] || null;
+      const doc = docRows[sIdx % Math.max(1, docRows.length)] || null;
+      const pay = payCycle[sIdx % payCycle.length];
+      const inv = `${prefix}-DEMO-${401 + sIdx}`;
+
+      const lineDefs = [0, 1, 2].map((offset) => {
+        const batch = sellable[(sIdx + offset) % sellable.length];
+        const packSize = Math.max(1, Number(batch.units_per_stock_unit || 1));
+        const unitPrice = Number((Number(batch.selling_price) / packSize).toFixed(2));
+        // Target ~₹950 per line item for BR001 so 3 lines ≈ ₹2,850 per bill
+        const targetLineAmount = 950 * scaleFactor;
+        const qty = Math.max(4, Math.min(packSize * 8, Math.round(targetLineAmount / Math.max(1, unitPrice))));
+        return { batch, unitPrice, qty };
+      });
+
+      // Deduplicate by batch_id in case sellable.length < 3
+      const mergedByBatch = new Map();
+      for (const ld of lineDefs) {
+        if (!mergedByBatch.has(ld.batch.batch_id)) mergedByBatch.set(ld.batch.batch_id, ld);
+      }
+
+      let subtotal = 0;
+      let taxableTotal = 0;
+      let cgstTotal = 0;
+      let sgstTotal = 0;
+      const prepared = Array.from(mergedByBatch.values()).map((ln) => {
+        const lineTotal = Number((ln.unitPrice * ln.qty).toFixed(2));
+        const gst = Number(ln.batch.default_gst_rate || 5);
+        const taxable = Number((lineTotal / (1 + gst / 100)).toFixed(2));
+        const tax = Number((lineTotal - taxable).toFixed(2));
+        const cgst = Number((tax / 2).toFixed(2));
+        const sgst = Number((tax - cgst).toFixed(2));
+        subtotal += lineTotal;
+        taxableTotal += taxable;
+        cgstTotal += cgst;
+        sgstTotal += sgst;
+        return { ...ln, lineTotal, gst, taxable, cgst, sgst };
+      });
+
+      const grandTotal = Number(subtotal.toFixed(2));
+      const notes = pat
+        ? `Patient: ${pat.full_name} | Age: ${30 + (sIdx % 25)} | Mobile: ${pat.mobile || "N/A"} | Gender: ${sIdx % 2 === 0 ? "MALE" : "FEMALE"} | Doctor: ${doc?.full_name || "Self"}`
+        : `Doctor: ${doc?.full_name || "Self"}`;
+
+      const [sRes] = await conn.execute(
+        `INSERT INTO sales (
+           branch_id, patient_id, doctor_id, sale_type, status, invoice_number,
+           client_transaction_id, sale_datetime, payment_method, subtotal, discount_total,
+           taxable_total, cgst_total, sgst_total, igst_total, grand_total, notes, created_by
+         ) VALUES (?, ?, ?, 'BILLED', 'FINALIZED', ?, ?, DATE_SUB(NOW(3), INTERVAL ? DAY), ?, ?, 0, ?, ?, ?, 0, ?, ?, ?)`,
+        [
+          branch.branch_id,
+          pat?.patient_id || null,
+          doc?.doctor_id || null,
+          inv,
+          randomUUID(),
+          daysAgo,
+          pay,
+          grandTotal,
+          Number(taxableTotal.toFixed(2)),
+          Number(cgstTotal.toFixed(2)),
+          Number(sgstTotal.toFixed(2)),
+          grandTotal,
+          notes,
+          userId,
+        ]
+      );
+
+      for (const pl of prepared) {
+        await conn.execute(
+          `INSERT INTO sale_items (
+             sale_id, branch_id, batch_id, product_name_snapshot, batch_number_snapshot,
+             expiry_date_snapshot, quantity, mrp, unit_selling_price, discount_amount,
+             hsn_code, gst_rate, taxable_amount, cgst_amount, sgst_amount, igst_amount, line_total
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, ?)`,
+          [
+            sRes.insertId,
+            branch.branch_id,
+            pl.batch.batch_id,
+            pl.batch.product_name,
+            pl.batch.batch_number,
+            toDateStr(pl.batch.expiry_date),
+            pl.qty,
+            pl.batch.mrp,
+            pl.unitPrice,
+            pl.batch.default_hsn_code || "30049099",
+            pl.gst,
+            pl.taxable,
+            pl.cgst,
+            pl.sgst,
+            pl.lineTotal,
+          ]
+        );
+        await adjustInventoryUnits(conn, branch.branch_id, pl.batch.batch_id, -pl.qty);
+        await conn.execute(
+          `INSERT INTO stock_transactions (
+             branch_id, batch_id, transaction_type, quantity_delta, source_type,
+             source_key, idempotency_key, notes, occurred_at, created_by
+           ) VALUES (?, ?, 'SALE', ?, 'BILLED_SALE', ?, ?, ?, DATE_SUB(NOW(3), INTERVAL ? DAY), ?)`,
+          [
+            branch.branch_id,
+            pl.batch.batch_id,
+            -pl.qty,
+            inv,
+            randomUUID(),
+            notes,
+            daysAgo,
+            userId,
+          ]
+        );
+      }
+    }
+  }
+  console.log("[MIGRATE] Seeded ~35k/month v4 demo dataset with daily trends and doctor attribution.");
 }
 
 module.exports = { ensureSchemaReady, splitSqlStatements };

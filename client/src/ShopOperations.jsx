@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { MedicineSearchRow } from "./MedicineSearchRow.jsx";
-import { BarChart } from "./components/AnalyticsCharts.jsx";
+import {
+  AreaLineChart,
+  BarChart,
+  DonutChart,
+  HorizontalBarChart,
+} from "./components/AnalyticsCharts.jsx";
 import { numberToWordsIndian } from "./utils/numberToWords.js";
 
 function headers(token) {
@@ -115,6 +120,7 @@ function ProfitSummaryCard({ analytics }) {
 
 function useBranchAnalytics(apiUrl, token) {
   const [analytics, setAnalytics] = useState(null);
+  const [charts, setCharts] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -126,17 +132,72 @@ function useBranchAnalytics(apiUrl, token) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Failed to load analytics.");
         setAnalytics(data.analytics);
+        setCharts(data.charts || null);
       } catch (err) {
         setError(err.message);
       }
     })();
   }, [apiUrl, token]);
 
-  return { analytics, error };
+  return { analytics, charts, error };
+}
+
+const PAYMENT_COLORS = {
+  UPI: "#10b981",
+  CASH: "#2563eb",
+  CARD: "#8b5cf6",
+  OTHER: "#f59e0b",
+};
+
+function ExtraDashboardCharts({ charts }) {
+  if (!charts) return null;
+
+  const paymentData = (charts.paymentMix || []).map((p) => ({
+    label: `${p.paymentMethod} (${p.billCount})`,
+    value: Number(p.total || 0),
+    color: PAYMENT_COLORS[p.paymentMethod] || "#64748b",
+  }));
+
+  const trendPoints = (charts.dailyTrend || []).map((d) => ({
+    label: d.label,
+    date: d.date,
+    value: Number(d.total || 0),
+    sub: `${d.billCount} bill${d.billCount === 1 ? "" : "s"}`,
+  }));
+
+  const topMedItems = (charts.topMedicines || []).map((m) => ({
+    label: m.productName,
+    sub: `${m.unitsSold} units`,
+    value: Number(m.revenue || 0),
+  }));
+
+  return (
+    <>
+      <div className="charts-grid-2col" style={{ marginTop: "20px" }}>
+        <AreaLineChart
+          title="Daily Sales Trend (This Month)"
+          points={trendPoints}
+          color="#2563eb"
+        />
+        <DonutChart
+          title="Payment Mode Breakdown (This Month)"
+          data={paymentData}
+          centerLabel="Billed Sales"
+        />
+      </div>
+      <div style={{ marginTop: "20px", marginBottom: "22px" }}>
+        <HorizontalBarChart
+          title="Top Selling Medicines (This Month)"
+          items={topMedItems}
+          color="#10b981"
+        />
+      </div>
+    </>
+  );
 }
 
 export function ShopDashboard({ apiUrl, token, branchName, userName }) {
-  const { analytics, error } = useBranchAnalytics(apiUrl, token);
+  const { analytics, charts, error } = useBranchAnalytics(apiUrl, token);
   const [alertCounts, setAlertCounts] = useState({ low: 0, expiry: 0 });
 
   useEffect(() => {
@@ -248,14 +309,17 @@ export function ShopDashboard({ apiUrl, token, branchName, userName }) {
       {!analytics && !error && <p className="empty-state">Loading metrics…</p>}
 
       {analytics && (
-        <div className="charts-grid-2col">
-          <ProfitSummaryCard analytics={analytics} />
-          <BarChart
-            title="Sales, Purchases & Total Profit (Day / Week / Month)"
-            categories={periodBarCategories}
-            series={periodBarSeries}
-          />
-        </div>
+        <>
+          <div className="charts-grid-2col">
+            <ProfitSummaryCard analytics={analytics} />
+            <BarChart
+              title="Sales, Purchases & Total Profit (Day / Week / Month)"
+              categories={periodBarCategories}
+              series={periodBarSeries}
+            />
+          </div>
+          <ExtraDashboardCharts charts={charts} />
+        </>
       )}
 
       <div className="dashboard-section-head">
@@ -279,7 +343,7 @@ export function ShopDashboard({ apiUrl, token, branchName, userName }) {
 }
 
 export function ShopAnalytics({ apiUrl, token }) {
-  const { analytics, error } = useBranchAnalytics(apiUrl, token);
+  const { analytics, charts, error } = useBranchAnalytics(apiUrl, token);
 
   const periodBarCategories = ["Today", "This Week", "This Month"];
   const periodBarSeries = [
@@ -325,14 +389,17 @@ export function ShopAnalytics({ apiUrl, token }) {
       {!analytics && !error && <p className="empty-state">Loading…</p>}
 
       {analytics && (
-        <div className="charts-grid-2col">
-          <ProfitSummaryCard analytics={analytics} />
-          <BarChart
-            title="Sales, Purchases & Total Profit (Day / Week / Month)"
-            categories={periodBarCategories}
-            series={periodBarSeries}
-          />
-        </div>
+        <>
+          <div className="charts-grid-2col">
+            <ProfitSummaryCard analytics={analytics} />
+            <BarChart
+              title="Sales, Purchases & Total Profit (Day / Week / Month)"
+              categories={periodBarCategories}
+              series={periodBarSeries}
+            />
+          </div>
+          <ExtraDashboardCharts charts={charts} />
+        </>
       )}
 
       <div className="dashboard-grid dashboard-grid-metrics">

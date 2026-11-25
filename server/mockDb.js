@@ -564,7 +564,7 @@ async function executeMockQuery(sql, params = []) {
   }
 
   // 13e. Billing: recent / history / search
-  if (norm.includes("FROM sales s") && norm.includes("sale_type = 'BILLED'")) {
+  if (norm.includes("FROM sales s") && norm.includes("sale_type = 'BILLED'") && !norm.includes("GROUP BY")) {
     const branchId = Number(params[0]);
     const searchTerm =
       params.length > 1
@@ -1036,6 +1036,50 @@ async function executeMockQuery(sql, params = []) {
       line_total: Number(params[5]),
     });
     return [{ insertId: id, affectedRows: 1 }];
+  }
+
+  // 26. Dashboard charts (payment mix, daily trend, top medicines)
+  if (norm.includes("s.payment_method, COUNT(*)") && norm.includes("GROUP BY s.payment_method")) {
+    const branchId = params[0] != null ? Number(params[0]) : null;
+    const map = new Map();
+    for (const s of sales) {
+      if (s.status !== "FINALIZED" || s.sale_type !== "BILLED") continue;
+      if (branchId != null && Number(s.branch_id) !== branchId) continue;
+      const pm = s.payment_method || "OTHER";
+      const cur = map.get(pm) || { payment_method: pm, bill_count: 0, total: 0 };
+      cur.bill_count += 1;
+      cur.total += Number(s.grand_total || 0);
+      map.set(pm, cur);
+    }
+    return [Array.from(map.values())];
+  }
+
+  if (norm.includes("DATE(s.sale_datetime) AS sale_day") && norm.includes("GROUP BY DATE(s.sale_datetime)")) {
+    const branchId = params[0] != null ? Number(params[0]) : null;
+    const map = new Map();
+    for (const s of sales) {
+      if (s.status !== "FINALIZED") continue;
+      if (branchId != null && Number(s.branch_id) !== branchId) continue;
+      const day = new Date(s.sale_datetime || Date.now()).toISOString().slice(0, 10);
+      const cur = map.get(day) || { sale_day: day, bill_count: 0, total: 0 };
+      cur.bill_count += 1;
+      cur.total += Number(s.grand_total || 0);
+      map.set(day, cur);
+    }
+    return [Array.from(map.values()).sort((a, b) => a.sale_day.localeCompare(b.sale_day))];
+  }
+
+  if (norm.includes("si.product_name_snapshot AS product_name") && norm.includes("GROUP BY si.product_name_snapshot")) {
+    const branchId = params[0] != null ? Number(params[0]) : null;
+    const map = new Map();
+    for (const si of sale_items) {
+      if (branchId != null && Number(si.branch_id) !== branchId) continue;
+      const cur = map.get(si.product_name_snapshot) || { product_name: si.product_name_snapshot, units_sold: 0, revenue: 0 };
+      cur.units_sold += Number(si.quantity || 0);
+      cur.revenue += Number(si.line_total || 0);
+      map.set(si.product_name_snapshot, cur);
+    }
+    return [Array.from(map.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 6)];
   }
 
   // Default fallback
