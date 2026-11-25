@@ -37,10 +37,10 @@ function periodDateFilter(column, period) {
     return `${column} >= CURDATE() AND ${column} < CURDATE() + INTERVAL 1 DAY`;
   }
   if (period === "week") {
-    return `${column} >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND ${column} <= NOW()`;
+    return `${column} >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND ${column} < CURDATE() + INTERVAL 1 DAY`;
   }
   if (period === "month") {
-    return `${column} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND ${column} <= NOW()`;
+    return `${column} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND ${column} < CURDATE() + INTERVAL 1 DAY`;
   }
   return null;
 }

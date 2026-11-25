@@ -27,16 +27,28 @@ router.get("/", authenticateToken, async (req, res) => {
         p.product_id,
         p.product_name,
         p.brand,
+        p.strength,
+        p.stock_unit_label,
+        p.smallest_unit_label,
+        p.units_per_stock_unit,
+        r.rack_code,
+        COALESCE(bp.low_stock_threshold, ?) AS low_stock_threshold,
         SUM(
-          i.quantity * COALESCE(p.units_per_stock_unit, 1) + i.loose_quantity
+          CASE
+            WHEN ba.expiry_date IS NULL OR ba.expiry_date >= CURDATE()
+            THEN i.quantity * COALESCE(p.units_per_stock_unit, 1) + i.loose_quantity
+            ELSE 0
+          END
         ) AS total_smallest_units
       FROM inventory i
       JOIN batches ba ON ba.batch_id = i.batch_id AND ba.branch_id = i.branch_id
       JOIN products p ON p.product_id = ba.product_id
       JOIN branches b ON b.branch_id = i.branch_id
+      LEFT JOIN branch_products bp ON bp.branch_id = i.branch_id AND bp.product_id = p.product_id
+      LEFT JOIN racks r ON r.rack_id = bp.rack_id AND r.branch_id = bp.branch_id
       WHERE p.is_active = TRUE
     `;
-    const lowParams = [];
+    const lowParams = [LOW_STOCK_UNITS];
 
     if (branchFilter) {
       lowStockSql += " AND i.branch_id = ?";
@@ -44,8 +56,11 @@ router.get("/", authenticateToken, async (req, res) => {
     }
 
     lowStockSql += `
-      GROUP BY b.branch_id, b.branch_name, p.product_id, p.product_name, p.brand
-      HAVING total_smallest_units <= ?
+      GROUP BY
+        b.branch_id, b.branch_name, p.product_id, p.product_name, p.brand,
+        p.strength, p.stock_unit_label, p.smallest_unit_label, p.units_per_stock_unit,
+        r.rack_code, bp.low_stock_threshold
+      HAVING total_smallest_units <= COALESCE(bp.low_stock_threshold, ?)
       ORDER BY total_smallest_units ASC, p.product_name ASC
       LIMIT 100
     `;
@@ -59,17 +74,21 @@ router.get("/", authenticateToken, async (req, res) => {
         b.branch_name,
         p.product_name,
         p.brand,
+        p.strength,
+        p.smallest_unit_label,
         ba.batch_id,
         ba.batch_number,
         ba.expiry_date,
         i.quantity,
         i.loose_quantity,
+        (i.quantity * COALESCE(p.units_per_stock_unit, 1) + i.loose_quantity) AS available_units,
         DATEDIFF(ba.expiry_date, CURDATE()) AS days_to_expiry
       FROM inventory i
       JOIN batches ba ON ba.batch_id = i.batch_id AND ba.branch_id = i.branch_id
       JOIN products p ON p.product_id = ba.product_id
       JOIN branches b ON b.branch_id = i.branch_id
       WHERE ba.expiry_date IS NOT NULL
+        AND ba.expiry_date >= CURDATE()
         AND ba.expiry_date <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
         AND (i.quantity > 0 OR i.loose_quantity > 0)
     `;

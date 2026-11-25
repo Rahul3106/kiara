@@ -377,58 +377,121 @@ export function ShopAlerts({ apiUrl, token }) {
         <div>
           <p className="eyebrow">ALERTS</p>
           <h2>Low stock & expiry</h2>
-          <p>Threshold: ≤10 units · Expiry window: 30 days (FR-30, FR-31).</p>
+          <p>Usable stock threshold: ≤10 units · Expiry window: Going to expire within 1 month (0–30 days).</p>
         </div>
       </div>
       {error && <div className="error-message">{error}</div>}
       <div className="table-card">
-        <h3>Low stock medicines</h3>
+        <h3>Low stock medicines ({alerts?.lowStock?.length || 0})</h3>
         {!alerts?.lowStock?.length ? (
           <p className="empty-state">No low-stock alerts.</p>
         ) : (
-          <table className="products-table">
-            <thead>
-              <tr>
-                <th>Medicine</th>
-                <th>Total units left</th>
-              </tr>
-            </thead>
-            <tbody>
-              {alerts.lowStock.map((row) => (
-                <tr key={`${row.product_id}-${row.branch_id}`}>
-                  <td>{row.product_name}</td>
-                  <td>{row.total_smallest_units}</td>
+          <div className="table-scroll">
+            <table className="products-table">
+              <thead>
+                <tr>
+                  <th>Medicine</th>
+                  <th>Rack</th>
+                  <th>Stock left</th>
+                  <th>Threshold</th>
+                  <th>Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {alerts.lowStock.map((row) => {
+                  const qtyLeft = Number(row.total_smallest_units || 0);
+                  const threshold = Number(row.low_stock_threshold ?? 10);
+                  const unitLabel = row.smallest_unit_label || "units";
+                  const statusLabel =
+                    qtyLeft === 0
+                      ? "Out of stock"
+                      : qtyLeft <= 5
+                        ? "Critical"
+                        : "Low stock";
+                  return (
+                    <tr key={`${row.product_id}-${row.branch_id}`}>
+                      <td>
+                        <strong>{row.product_name}</strong>
+                        {(row.brand || row.strength) && (
+                          <small>
+                            {[row.brand, row.strength].filter(Boolean).join(" · ")}
+                          </small>
+                        )}
+                      </td>
+                      <td>{row.rack_code || "—"}</td>
+                      <td>
+                        <strong>{qtyLeft}</strong> {unitLabel}
+                      </td>
+                      <td>
+                        ≤ {threshold} {unitLabel}
+                      </td>
+                      <td>
+                        <span
+                          className={`status-badge ${
+                            qtyLeft === 0 ? "status-danger" : "status-warning"
+                          }`}
+                        >
+                          {statusLabel}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
       <div className="table-card">
-        <h3>Expiry alerts</h3>
+        <h3>Expiring within 1 month ({alerts?.expiryAlerts?.length || 0})</h3>
         {!alerts?.expiryAlerts?.length ? (
-          <p className="empty-state">No batches expiring within 30 days.</p>
+          <p className="empty-state">No batches expiring within the next 30 days.</p>
         ) : (
-          <table className="products-table">
-            <thead>
-              <tr>
-                <th>Medicine</th>
-                <th>Batch</th>
-                <th>Expiry</th>
-                <th>Days left</th>
-              </tr>
-            </thead>
-            <tbody>
-              {alerts.expiryAlerts.map((row) => (
-                <tr key={row.batch_id}>
-                  <td>{row.product_name}</td>
-                  <td>{row.batch_number}</td>
-                  <td>{String(row.expiry_date).slice(0, 10)}</td>
-                  <td>{row.days_to_expiry}</td>
+          <div className="table-scroll">
+            <table className="products-table">
+              <thead>
+                <tr>
+                  <th>Medicine</th>
+                  <th>Batch</th>
+                  <th>Stock left</th>
+                  <th>Expiry date</th>
+                  <th>Days left</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {alerts.expiryAlerts.map((row) => {
+                  const daysLeft = Number(row.days_to_expiry ?? 0);
+                  return (
+                    <tr key={row.batch_id}>
+                      <td>
+                        <strong>{row.product_name}</strong>
+                        {(row.brand || row.strength) && (
+                          <small>
+                            {[row.brand, row.strength].filter(Boolean).join(" · ")}
+                          </small>
+                        )}
+                      </td>
+                      <td>{row.batch_number}</td>
+                      <td>
+                        {row.available_units ?? row.quantity}{" "}
+                        {row.smallest_unit_label || "units"}
+                      </td>
+                      <td>{String(row.expiry_date).slice(0, 10)}</td>
+                      <td>
+                        <span
+                          className={`status-badge ${
+                            daysLeft <= 7 ? "status-danger" : "status-warning"
+                          }`}
+                        >
+                          {daysLeft === 0 ? "Expires today" : `${daysLeft} days`}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </>

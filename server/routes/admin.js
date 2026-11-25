@@ -18,24 +18,67 @@ router.get("/overview", async (req, res) => {
        ORDER BY branch_id ASC`
     );
 
-    const [salesByBranch] = await pool.query(
+    const [salesAgg] = await pool.query(
       `SELECT
          s.branch_id,
          b.branch_name,
-         COUNT(*) AS sale_count,
-         COALESCE(SUM(s.grand_total), 0) AS total_sales
+         SUM(CASE WHEN s.sale_type = 'BILLED' THEN 1 ELSE 0 END) AS billed_count,
+         SUM(CASE WHEN s.sale_type = 'UNBILLED' THEN 1 ELSE 0 END) AS unbilled_count,
+         COALESCE(SUM(CASE WHEN s.sale_type = 'BILLED' THEN s.grand_total ELSE 0 END), 0) AS gross_billed,
+         COALESCE(SUM(CASE WHEN s.sale_type = 'UNBILLED' THEN s.grand_total ELSE 0 END), 0) AS unbilled_total
        FROM sales s
        JOIN branches b ON b.branch_id = s.branch_id
        WHERE s.status = 'FINALIZED'
        GROUP BY s.branch_id, b.branch_name`
     );
 
-    const [totals] = await pool.query(
+    const [returnsAgg] = await pool.query(
       `SELECT
-         COUNT(*) AS sale_count,
-         COALESCE(SUM(grand_total), 0) AS total_sales
-       FROM sales
-       WHERE status = 'FINALIZED'`
+         branch_id,
+         COALESCE(SUM(return_total), 0) AS customer_returns
+       FROM customer_returns
+       GROUP BY branch_id`
+    );
+
+    const returnsByBranch = new Map(
+      returnsAgg.map((r) => [Number(r.branch_id), Number(r.customer_returns || 0)])
+    );
+
+    let totalBilledCount = 0;
+    let totalUnbilledCount = 0;
+    let totalGrossBilled = 0;
+    let totalUnbilled = 0;
+    let totalReturns = 0;
+
+    const salesByBranch = salesAgg.map((row) => {
+      const billed = Number(row.gross_billed || 0);
+      const unbilled = Number(row.unbilled_total || 0);
+      const ret = returnsByBranch.get(Number(row.branch_id)) || 0;
+      const net = Number((billed + unbilled - ret).toFixed(2));
+      const billedCount = Number(row.billed_count || 0);
+      const unbilledCount = Number(row.unbilled_count || 0);
+
+      totalBilledCount += billedCount;
+      totalUnbilledCount += unbilledCount;
+      totalGrossBilled += billed;
+      totalUnbilled += unbilled;
+      totalReturns += ret;
+
+      return {
+        branch_id: row.branch_id,
+        branch_name: row.branch_name,
+        sale_count: billedCount,
+        billed_count: billedCount,
+        unbilled_count: unbilledCount,
+        gross_billed: Number(billed.toFixed(2)),
+        unbilled_total: Number(unbilled.toFixed(2)),
+        customer_returns: Number(ret.toFixed(2)),
+        total_sales: net,
+      };
+    });
+
+    const netSalesTotal = Number(
+      (totalGrossBilled + totalUnbilled - totalReturns).toFixed(2)
     );
 
     const [productCount] = await pool.query(
@@ -46,7 +89,15 @@ router.get("/overview", async (req, res) => {
       success: true,
       branches: branchRows,
       salesByBranch,
-      totals: totals[0] || { sale_count: 0, total_sales: 0 },
+      totals: {
+        sale_count: totalBilledCount,
+        billed_count: totalBilledCount,
+        unbilled_count: totalUnbilledCount,
+        gross_billed: Number(totalGrossBilled.toFixed(2)),
+        unbilled_total: Number(totalUnbilled.toFixed(2)),
+        customer_returns: Number(totalReturns.toFixed(2)),
+        total_sales: netSalesTotal,
+      },
       activeProductCount: productCount[0]?.count ?? 0,
     });
   } catch (error) {

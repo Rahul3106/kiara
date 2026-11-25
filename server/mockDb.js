@@ -339,6 +339,30 @@ async function executeMockQuery(sql, params = []) {
     return [result];
   }
 
+  // 10b. Admin overview aggregation (salesAgg & returnsAgg)
+  if (norm.includes("AS gross_billed") && norm.includes("GROUP BY s.branch_id")) {
+    const byBranch = branches.map((b) => {
+      const bSales = sales.filter(
+        (s) => Number(s.branch_id) === Number(b.branch_id) && s.status === "FINALIZED"
+      );
+      const billed = bSales.filter((s) => s.sale_type === "BILLED");
+      const unbilled = bSales.filter((s) => s.sale_type === "UNBILLED");
+      return {
+        branch_id: b.branch_id,
+        branch_name: b.branch_name,
+        billed_count: billed.length,
+        unbilled_count: unbilled.length,
+        gross_billed: billed.reduce((sum, s) => sum + Number(s.grand_total || 0), 0),
+        unbilled_total: unbilled.reduce((sum, s) => sum + Number(s.grand_total || 0), 0),
+      };
+    }).filter((r) => r.billed_count > 0 || r.unbilled_count > 0);
+    return [byBranch];
+  }
+
+  if (norm.includes("FROM customer_returns") && norm.includes("GROUP BY branch_id")) {
+    return [[]];
+  }
+
   // 11. Admin sales list (with patient join and search)
   if (norm.includes("FROM sales s") && norm.includes("JOIN branches b ON b.branch_id = s.branch_id")) {
     let list = sales.map((s) => {

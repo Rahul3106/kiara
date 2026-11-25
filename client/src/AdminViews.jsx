@@ -10,7 +10,7 @@ function authHeaders(token) {
 
 export function AdminDashboard({ apiUrl, token, onSelectBranchSales }) {
   const [overview, setOverview] = useState(null);
-  const [analyticsPeriod, setAnalyticsPeriod] = useState("day");
+  const [analyticsPeriod, setAnalyticsPeriod] = useState("month");
   const [analytics, setAnalytics] = useState(null);
   const [error, setError] = useState("");
 
@@ -133,12 +133,13 @@ export function AdminDashboard({ apiUrl, token, onSelectBranchSales }) {
 
       <div className="dashboard-kpi-grid">
         <article className="stat-card stat-card-sales">
-          <span className="stat-card-label">Lifetime sales (all branches)</span>
+          <span className="stat-card-label">Lifetime net sales (all branches)</span>
           <p className="stat-card-value">
             ₹{Number(overview.totals?.total_sales || 0).toFixed(2)}
           </p>
           <span className="stat-card-hint">
-            {overview.totals?.sale_count || 0} finalized bills
+            {overview.totals?.billed_count ?? overview.totals?.sale_count ?? 0} billed ·{" "}
+            {overview.totals?.unbilled_count ?? 0} unbilled (net of returns)
           </span>
         </article>
         <article className="stat-card stat-card-purchase">
@@ -291,7 +292,7 @@ export function AdminDashboard({ apiUrl, token, onSelectBranchSales }) {
               <h3>{branch.branch_name}</h3>
               <p>GSTIN: {branch.gstin}</p>
               <p>
-                Sales: ₹{Number(sales?.total_sales || 0).toFixed(2)} (
+                Net sales: ₹{Number(sales?.total_sales || 0).toFixed(2)} (
                 {sales?.sale_count || 0} bills)
               </p>
               {!branch.is_active && (

@@ -3569,6 +3569,11 @@ button.branch-tile-button:hover:not(:disabled) {
   max-width: 520px;
 }
 
+.status-danger {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 @media (max-width: 640px) {
   .bill-summary-total {
     align-items: flex-start;
