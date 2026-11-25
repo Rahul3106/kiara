@@ -23,8 +23,9 @@ ENV PORT=5000
 COPY server/package*.json ./server/
 RUN cd server && npm ci --only=production
 
-# Copy server application
+# Copy server application and database schema/seed SQL scripts
 COPY server/ ./server/
+COPY database/ ./database/
 
 # Copy built frontend assets from builder stage
 COPY --from=client-builder /app/client/dist ./client/dist
